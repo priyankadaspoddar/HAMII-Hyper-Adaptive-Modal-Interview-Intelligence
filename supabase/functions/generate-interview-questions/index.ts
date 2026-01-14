@@ -33,26 +33,41 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are an expert HR interviewer and career coach. Your task is to analyze a candidate's resume and generate insightful, personalized interview questions.
+    const systemPrompt = `You are an expert HR interviewer and career coach. Your task is to analyze a candidate's resume and generate insightful, personalized interview questions that are commonly asked in real job interviews.
 
-Generate exactly ${numberOfQuestions} interview questions based on the resume provided. The questions should:
-1. Be specific to the candidate's experience, skills, and background
-2. Include a mix of behavioral, technical, and situational questions
-3. Probe deeper into their accomplishments and projects mentioned
-4. Test their problem-solving abilities related to their field
-5. Assess cultural fit and soft skills
+Generate exactly ${numberOfQuestions} interview questions based on the resume provided. 
+
+IMPORTANT - ALWAYS include these essential questions in order:
+1. FIRST question MUST be an introduction question like "Tell me about yourself" or "Walk me through your background"
+2. SECOND question MUST be about their projects/work experience mentioned in the resume like "Tell me about the projects you've worked on" or "Describe a significant project from your experience"
+3. Remaining questions should cover:
+   - Technical skills mentioned in the resume
+   - Behavioral scenarios (STAR format)
+   - Problem-solving abilities
+   - Career goals and cultural fit
+
+The questions should:
+- Be specific to the candidate's actual experience, skills, and background from the resume
+- Reference specific technologies, companies, or achievements mentioned
+- Include both standard interview questions and personalized ones
+- Test communication skills, technical knowledge, and soft skills
 
 For each question, also provide:
-- The category (Technical, Behavioral, Situational, Experience-based, or Soft Skills)
+- The category (Introduction, Experience-based, Technical, Behavioral, Situational, or Soft Skills)
 - The skill or competency being assessed
-- A brief tip for what makes a good answer`;
+- A brief tip for what makes a good answer (mention STAR method for behavioral questions)`;
 
-    const userPrompt = `Based on the following resume, generate ${numberOfQuestions} personalized interview questions:
+    const userPrompt = `Analyze this resume and generate ${numberOfQuestions} personalized interview questions. 
+
+MANDATORY: 
+- Question 1 MUST be an introduction/self-introduction question
+- Question 2 MUST be about their projects and work experience
+- Remaining questions should be specific to the skills, technologies, and experience mentioned
 
 RESUME:
 ${resumeText}
 
-Generate the questions in a structured format.`;
+Generate questions that a real interviewer would ask based on this specific resume.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -83,10 +98,10 @@ Generate the questions in a structured format.`;
                         question: { type: "string", description: "The interview question" },
                         category: { 
                           type: "string", 
-                          enum: ["Technical", "Behavioral", "Situational", "Experience-based", "Soft Skills"]
+                          enum: ["Introduction", "Experience-based", "Technical", "Behavioral", "Situational", "Soft Skills"]
                         },
                         skillAssessed: { type: "string", description: "The skill or competency being assessed" },
-                        answerTip: { type: "string", description: "A brief tip for what makes a good answer" }
+                        answerTip: { type: "string", description: "A brief tip for what makes a good answer. Mention STAR method for behavioral questions." }
                       },
                       required: ["question", "category", "skillAssessed", "answerTip"],
                       additionalProperties: false
