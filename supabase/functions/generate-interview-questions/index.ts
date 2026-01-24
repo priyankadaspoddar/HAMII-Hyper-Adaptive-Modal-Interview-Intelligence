@@ -33,58 +33,129 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are an expert HR interviewer using a STRICT EXTRACTION-BASED ALGORITHM called NER-KE (Named Entity Recognition & Keyword Extraction). You must ONLY use information explicitly written in the resume - NEVER invent, assume, or hallucinate any details.
+    // Enhanced NER-KE Algorithm System Prompt
+    const systemPrompt = `You are an expert resume parser implementing the NER-KE (Named Entity Recognition & Keyword Extraction) Algorithm.
 
-## ALGORITHM: NER-KE (Named Entity Recognition & Keyword Extraction)
+## ALGORITHM SPECIFICATION: NER-KE v2.0
 
-### PHASE 1: ENTITY EXTRACTION (Parse resume line-by-line)
-Extract ONLY what is explicitly written - do NOT infer or assume:
-- PERSON_NAME: Extract candidate's name if present, otherwise use "The candidate"
-- SKILLS_LIST: Extract exact technology names, tools, frameworks, languages (e.g., "React", "Python", "AWS")
-- PROJECT_LIST: Extract exact project names and their described functionalities
-- ORGANIZATION_LIST: Extract company names, institution names
-- ROLE_LIST: Extract job titles, positions held
-- EDUCATION_LIST: Extract degrees, certifications, courses
-- METRICS_LIST: Extract numbers, percentages, achievements with quantifiable data
+### CORE PRINCIPLE: ZERO HALLUCINATION
+You must ONLY extract and reference information that is EXPLICITLY written in the resume text.
+- If information is not present, mark it as "NOT_FOUND" or empty array
+- NEVER infer, assume, or generate any data not in the source text
+- Every extracted entity must have a direct text match in the resume
 
-### PHASE 2: CANDIDATE SUMMARY GENERATION (CRITICAL - NO HALLUCINATION)
-Create summary using ONLY extracted entities with this template:
-"[PERSON_NAME] has experience in [SKILLS_LIST]. [If PROJECT_LIST exists: 'Has worked on projects including [PROJECT_LIST].'] [If ORGANIZATION_LIST exists: 'Previous experience at [ORGANIZATION_LIST].'] [If EDUCATION_LIST exists: 'Education: [EDUCATION_LIST].']"
+### PHASE 1: TEXT PREPROCESSING
+1. Parse the resume text line-by-line
+2. Identify section boundaries (Education, Experience, Skills, Projects, etc.)
+3. Preserve original phrasing for extraction
 
-STRICT SUMMARY RULES:
-- Use ONLY words and phrases that appear in the resume
-- If a field was NOT found, OMIT that sentence entirely
-- Do NOT add adjectives like "skilled", "experienced", "proficient" unless resume explicitly states them
-- Do NOT assume years of experience unless explicitly stated
-- Keep summary factual and directly traceable to resume text
+### PHASE 2: DETERMINISTIC ENTITY EXTRACTION
+Extract using pattern matching and keyword recognition:
 
-### PHASE 3: QUESTION GENERATION (Reference-Based)
-Generate ${numberOfQuestions} questions where each MUST reference extracted entities:
-1. Introduction: "Tell me about yourself" - but tailor based on their specific [ROLE_LIST] and [SKILLS_LIST]
-2. Project-specific: Use EXACT name from [PROJECT_LIST] - "Tell me about your [PROJECT_NAME] project"
-3-${numberOfQuestions}: Each must reference a SPECIFIC item from SKILLS_LIST, ORGANIZATION_LIST, or METRICS_LIST
+**PERSON_NAME**: Look for name at the top of resume or after "Name:" label
+**CONTACT_INFO**: Email patterns, phone patterns, LinkedIn URLs
 
-## VALIDATION BEFORE OUTPUT:
-For candidateSummary: Can I highlight each phrase in the original resume? If NO, remove it.
-For each question: Does it contain a specific name/term from the resume? If NO, rewrite it.`;
+**SKILLS_LIST** (Technical & Soft):
+- Programming languages: Python, Java, JavaScript, C++, etc.
+- Frameworks: React, Angular, Django, Spring, etc.
+- Tools: Git, Docker, AWS, etc.
+- Extract EXACT spelling as written
 
-    const userPrompt = `RESUME TEXT FOR NER-KE EXTRACTION:
-"""
+**PROJECT_LIST** with attributes:
+- Project name (EXACT as written)
+- Technologies used (ONLY those explicitly mentioned for this project)
+- Brief description (use original text, do not paraphrase)
+- Quantifiable outcomes if mentioned (numbers, percentages)
+
+**EXPERIENCE_LIST**:
+- Company/Organization name (EXACT)
+- Role/Title (EXACT)
+- Duration if mentioned
+- Key responsibilities (use original phrasing)
+
+**EDUCATION_LIST**:
+- Degree name (EXACT)
+- Institution name (EXACT)
+- Year/Duration if mentioned
+- GPA/Grades if mentioned
+
+**ACHIEVEMENTS_LIST**:
+- Certifications (EXACT names)
+- Awards (EXACT names)
+- Quantifiable metrics (numbers, percentages as written)
+
+### PHASE 3: TEMPLATE-BASED SUMMARY GENERATION
+Generate candidateSummary using ONLY this template:
+
+"[NAME or 'Candidate'] [has/with] [SKILLS count] technical skills including [TOP 3-5 SKILLS from SKILLS_LIST]. [IF EXPERIENCE: 'Experience at [ORGANIZATION names].''] [IF PROJECTS: 'Worked on [PROJECT count] projects including [PROJECT names].'] [IF EDUCATION: 'Education: [DEGREE] from [INSTITUTION].']"
+
+STRICT RULES:
+- Use ONLY words appearing in the resume
+- If a section is empty/NOT_FOUND, OMIT that part entirely
+- Do NOT add descriptors (skilled, proficient, expert) unless explicitly in resume
+- Do NOT assume experience levels or years
+
+### PHASE 4: ENTITY-ANCHORED QUESTION GENERATION
+Generate ${numberOfQuestions} questions where each MUST:
+
+1. **Introduction Question**: 
+   "Tell me about yourself and your background in [EXTRACTED_SKILL_DOMAIN]"
+   - Use actual skill domain from SKILLS_LIST
+
+2. **Project-Specific Question** (if projects exist):
+   "Can you walk me through your [EXACT_PROJECT_NAME] project? What was your role and what technologies did you use?"
+   - Use EXACT project name from PROJECT_LIST
+
+3. **Experience-Based Questions** (if experience exists):
+   "At [EXACT_COMPANY_NAME], you worked as [EXACT_ROLE]. Can you describe [specific responsibility from resume]?"
+   - Reference EXACT company and role
+
+4. **Technical Skill Questions**:
+   "You mentioned experience with [EXACT_SKILL]. How did you apply it in [EXACT_PROJECT or EXACT_ROLE]?"
+   - Cross-reference skills with projects/experience
+
+5. **Achievement/Metrics Questions** (if achievements exist):
+   "You achieved [EXACT_METRIC from resume]. How did you accomplish this?"
+   - Use EXACT numbers/percentages from resume
+
+### VALIDATION CHECKLIST (Must pass all):
+□ Every skill in summary exists in SKILLS_LIST extracted from resume
+□ Every project name matches EXACT spelling in resume
+□ Every company name matches EXACT spelling in resume
+□ Every metric/number was copied from resume text
+□ No adjectives added that weren't in original text
+□ candidateSummary contains ONLY traceable phrases`;
+
+    const userPrompt = `EXECUTE NER-KE ALGORITHM v2.0 ON THIS RESUME:
+
+===== RESUME TEXT START =====
 ${resumeText}
-"""
+===== RESUME TEXT END =====
 
-EXECUTE NER-KE ALGORITHM:
+STEP-BY-STEP EXECUTION:
 
-STEP 1: Extract all entities from the resume above (parse each line)
-STEP 2: Generate candidateSummary using ONLY extracted entities - no assumptions, no embellishments
-STEP 3: Generate exactly ${numberOfQuestions} questions, each referencing specific extracted entities
+STEP 1 - PREPROCESSING:
+- Parse each line of the resume
+- Identify section headers
 
-CRITICAL VALIDATION BEFORE OUTPUT:
-□ Is every word in candidateSummary traceable to the resume? Remove any that aren't.
-□ Does each question contain a specific name, technology, or company from the resume?
-□ Have I avoided generic phrases like "your experience" in favor of specifics like "your experience at [Company Name]"?
+STEP 2 - ENTITY EXTRACTION:
+For each entity type, extract ONLY what is explicitly written.
+If not found, use empty array or "NOT_FOUND".
 
-OUTPUT: Return structured data with questions and candidateSummary based SOLELY on extracted resume content.`;
+STEP 3 - SUMMARY GENERATION:
+Create candidateSummary using ONLY the template and extracted entities.
+Omit any section where entities were not found.
+
+STEP 4 - QUESTION GENERATION:
+Generate exactly ${numberOfQuestions} questions, each anchored to specific extracted entities.
+Every question must contain at least one EXACT term from the resume.
+
+STEP 5 - VALIDATION:
+Before output, verify:
+- Can I ctrl+F find each extracted skill/project/company in the resume? YES/NO
+- Does each question contain a verbatim term from the resume? YES/NO
+
+OUTPUT the structured extraction result.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -102,54 +173,141 @@ OUTPUT: Return structured data with questions and candidateSummary based SOLELY 
           {
             type: "function",
             function: {
-              name: "generate_questions",
-              description: "Generate personalized interview questions based on the resume",
+              name: "extract_and_generate",
+              description: "Extract entities from resume and generate interview questions",
               parameters: {
                 type: "object",
                 properties: {
+                  extractedEntities: {
+                    type: "object",
+                    description: "Entities extracted using NER-KE algorithm - ONLY include what is explicitly in resume",
+                    properties: {
+                      name: { 
+                        type: "string", 
+                        description: "Candidate name if found, otherwise 'Candidate'" 
+                      },
+                      email: { 
+                        type: "string", 
+                        description: "Email if found, otherwise empty string" 
+                      },
+                      skills: { 
+                        type: "array", 
+                        items: { type: "string" }, 
+                        description: "EXACT skill names from resume - no inference" 
+                      },
+                      projects: { 
+                        type: "array", 
+                        items: { 
+                          type: "object",
+                          properties: {
+                            name: { type: "string", description: "EXACT project name as written" },
+                            technologies: { 
+                              type: "array", 
+                              items: { type: "string" },
+                              description: "Technologies explicitly mentioned for this project"
+                            },
+                            description: { type: "string", description: "Brief description using original text" },
+                            metrics: { type: "string", description: "Quantifiable outcomes if mentioned" }
+                          },
+                          required: ["name"]
+                        },
+                        description: "Projects with EXACT names from resume" 
+                      },
+                      experience: { 
+                        type: "array", 
+                        items: { 
+                          type: "object",
+                          properties: {
+                            company: { type: "string", description: "EXACT company name" },
+                            role: { type: "string", description: "EXACT job title" },
+                            duration: { type: "string", description: "Duration if mentioned" },
+                            responsibilities: { 
+                              type: "array", 
+                              items: { type: "string" },
+                              description: "Key responsibilities using original phrasing"
+                            }
+                          },
+                          required: ["company", "role"]
+                        },
+                        description: "Work experience with EXACT company names and roles" 
+                      },
+                      education: { 
+                        type: "array", 
+                        items: { 
+                          type: "object",
+                          properties: {
+                            degree: { type: "string", description: "EXACT degree name" },
+                            institution: { type: "string", description: "EXACT institution name" },
+                            year: { type: "string", description: "Graduation year if mentioned" },
+                            gpa: { type: "string", description: "GPA if mentioned" }
+                          },
+                          required: ["degree", "institution"]
+                        },
+                        description: "Education with EXACT degree and institution names" 
+                      },
+                      achievements: { 
+                        type: "array", 
+                        items: { type: "string" }, 
+                        description: "Certifications, awards, metrics - EXACT as written" 
+                      }
+                    },
+                    required: ["name", "skills"]
+                  },
+                  candidateSummary: {
+                    type: "string",
+                    description: "Factual summary using ONLY extracted entities. Template-based, no assumptions. Omit sections with no data."
+                  },
                   questions: {
                     type: "array",
                     items: {
                       type: "object",
                       properties: {
-                        question: { type: "string", description: "The interview question" },
+                        question: { 
+                          type: "string", 
+                          description: "Interview question - MUST contain EXACT terms from resume" 
+                        },
                         category: { 
                           type: "string", 
-                          enum: ["Introduction", "Experience-based", "Technical", "Behavioral", "Situational", "Soft Skills"]
+                          enum: ["Introduction", "Project-Based", "Experience-Based", "Technical", "Behavioral", "Achievement-Based"]
                         },
-                        skillAssessed: { type: "string", description: "The skill or competency being assessed" },
-                        answerTip: { type: "string", description: "A brief tip for what makes a good answer. Mention STAR method for behavioral questions." }
+                        skillAssessed: { 
+                          type: "string", 
+                          description: "Skill being assessed - use EXACT skill name from resume" 
+                        },
+                        resumeReference: {
+                          type: "string",
+                          description: "The EXACT term/phrase from resume this question references"
+                        },
+                        answerTip: { 
+                          type: "string", 
+                          description: "Tip for answering. Use STAR method for behavioral questions." 
+                        }
                       },
-                      required: ["question", "category", "skillAssessed", "answerTip"],
-                      additionalProperties: false
+                      required: ["question", "category", "skillAssessed", "resumeReference", "answerTip"]
                     }
                   },
-                  extractedEntities: {
+                  extractionConfidence: {
                     type: "object",
-                    description: "Entities extracted from the resume using NER-KE algorithm",
                     properties: {
-                      name: { type: "string", description: "Candidate name extracted from resume" },
-                      skills: { type: "array", items: { type: "string" }, description: "Exact skills/technologies from resume" },
-                      projects: { type: "array", items: { type: "string" }, description: "Exact project names from resume" },
-                      organizations: { type: "array", items: { type: "string" }, description: "Company/institution names from resume" },
-                      roles: { type: "array", items: { type: "string" }, description: "Job titles from resume" },
-                      education: { type: "array", items: { type: "string" }, description: "Degrees/certifications from resume" }
+                      skillsFound: { type: "number", description: "Number of unique skills extracted" },
+                      projectsFound: { type: "number", description: "Number of projects extracted" },
+                      experienceFound: { type: "number", description: "Number of work experiences extracted" },
+                      educationFound: { type: "number", description: "Number of education entries extracted" },
+                      overallQuality: { 
+                        type: "string", 
+                        enum: ["high", "medium", "low"],
+                        description: "Overall extraction quality based on resume detail"
+                      }
                     },
-                    required: ["skills"],
-                    additionalProperties: false
-                  },
-                  candidateSummary: {
-                    type: "string",
-                    description: "Summary generated ONLY from extracted entities - no assumptions or embellishments. Each phrase must be traceable to the resume."
+                    required: ["skillsFound", "overallQuality"]
                   }
                 },
-                required: ["questions", "extractedEntities", "candidateSummary"],
-                additionalProperties: false
+                required: ["extractedEntities", "candidateSummary", "questions", "extractionConfidence"]
               }
             }
           }
         ],
-        tool_choice: { type: "function", function: { name: "generate_questions" } }
+        tool_choice: { type: "function", function: { name: "extract_and_generate" } }
       }),
     });
 
@@ -183,7 +341,11 @@ OUTPUT: Return structured data with questions and candidateSummary based SOLELY 
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     if (toolCall?.function?.arguments) {
       const result = JSON.parse(toolCall.function.arguments);
-      console.log("Generated", result.questions?.length || 0, "questions");
+      console.log("NER-KE Extraction complete:");
+      console.log("- Skills found:", result.extractionConfidence?.skillsFound || 0);
+      console.log("- Projects found:", result.extractionConfidence?.projectsFound || 0);
+      console.log("- Experience found:", result.extractionConfidence?.experienceFound || 0);
+      console.log("- Questions generated:", result.questions?.length || 0);
       
       return new Response(
         JSON.stringify(result),

@@ -20,7 +20,47 @@ interface InterviewQuestion {
   question: string;
   category: string;
   skillAssessed: string;
+  resumeReference?: string;
   answerTip: string;
+}
+
+interface ExtractedProject {
+  name: string;
+  technologies?: string[];
+  description?: string;
+  metrics?: string;
+}
+
+interface ExtractedExperience {
+  company: string;
+  role: string;
+  duration?: string;
+  responsibilities?: string[];
+}
+
+interface ExtractedEducation {
+  degree: string;
+  institution: string;
+  year?: string;
+  gpa?: string;
+}
+
+interface ExtractedEntities {
+  name: string;
+  email?: string;
+  skills: string[];
+  projects?: ExtractedProject[];
+  experience?: ExtractedExperience[];
+  education?: ExtractedEducation[];
+  achievements?: string[];
+}
+
+interface ExtractionConfidence {
+  skillsFound: number;
+  projectsFound?: number;
+  experienceFound?: number;
+  educationFound?: number;
+  overallQuality: 'high' | 'medium' | 'low';
 }
 
 interface AnswerEvaluation {
@@ -49,6 +89,8 @@ const InterviewPractice = () => {
   const [resumeText, setResumeText] = useState("");
   const [isParsingResume, setIsParsingResume] = useState(false);
   const [candidateSummary, setCandidateSummary] = useState("");
+  const [extractedEntities, setExtractedEntities] = useState<ExtractedEntities | null>(null);
+  const [extractionConfidence, setExtractionConfidence] = useState<ExtractionConfidence | null>(null);
   
   // Interview state
   const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
@@ -174,7 +216,14 @@ const InterviewPractice = () => {
       if (data.questions) {
         setQuestions(data.questions);
         setCandidateSummary(data.candidateSummary || "");
-        toast({ title: "Questions Generated", description: `${data.questions.length} personalized questions ready!` });
+        setExtractedEntities(data.extractedEntities || null);
+        setExtractionConfidence(data.extractionConfidence || null);
+        
+        const confidence = data.extractionConfidence;
+        toast({ 
+          title: "NER-KE Extraction Complete", 
+          description: `Found ${confidence?.skillsFound || 0} skills, ${confidence?.projectsFound || 0} projects. Quality: ${confidence?.overallQuality || 'N/A'}` 
+        });
       }
     } catch (error: any) {
       console.error("Error generating questions:", error);
@@ -668,9 +717,105 @@ const InterviewPractice = () => {
 
         {candidateSummary && !interviewStarted && (
           <Card className="p-6 bg-gradient-card border-border mb-6">
-            <h3 className="font-semibold mb-2">Candidate Profile Summary</h3>
-            <p className="text-sm text-muted-foreground">{candidateSummary}</p>
-            <Button className="mt-4" onClick={() => setInterviewStarted(true)}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg">Candidate Profile Summary</h3>
+              {extractionConfidence && (
+                <span className={`text-xs px-2 py-1 rounded ${
+                  extractionConfidence.overallQuality === 'high' ? 'bg-green-500/20 text-green-500' :
+                  extractionConfidence.overallQuality === 'medium' ? 'bg-yellow-500/20 text-yellow-500' :
+                  'bg-red-500/20 text-red-500'
+                }`}>
+                  Extraction Quality: {extractionConfidence.overallQuality}
+                </span>
+              )}
+            </div>
+            
+            <p className="text-sm text-muted-foreground mb-4">{candidateSummary}</p>
+            
+            {/* NER-KE Extracted Entities Display */}
+            {extractedEntities && (
+              <div className="bg-background/50 rounded-lg p-4 mb-4">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  NER-KE Extracted Entities
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  {/* Skills */}
+                  {extractedEntities.skills && extractedEntities.skills.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Skills ({extractedEntities.skills.length})</p>
+                      <div className="flex flex-wrap gap-1">
+                        {extractedEntities.skills.slice(0, 10).map((skill, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs">
+                            {skill}
+                          </span>
+                        ))}
+                        {extractedEntities.skills.length > 10 && (
+                          <span className="text-xs text-muted-foreground">+{extractedEntities.skills.length - 10} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Projects */}
+                  {extractedEntities.projects && extractedEntities.projects.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Projects ({extractedEntities.projects.length})</p>
+                      <div className="flex flex-wrap gap-1">
+                        {extractedEntities.projects.map((proj, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded text-xs">
+                            {proj.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Experience */}
+                  {extractedEntities.experience && extractedEntities.experience.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Experience ({extractedEntities.experience.length})</p>
+                      <div className="space-y-1">
+                        {extractedEntities.experience.map((exp, i) => (
+                          <p key={i} className="text-xs">
+                            <span className="font-medium">{exp.role}</span>
+                            <span className="text-muted-foreground"> at {exp.company}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Education */}
+                  {extractedEntities.education && extractedEntities.education.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Education ({extractedEntities.education.length})</p>
+                      <div className="space-y-1">
+                        {extractedEntities.education.map((edu, i) => (
+                          <p key={i} className="text-xs">
+                            <span className="font-medium">{edu.degree}</span>
+                            <span className="text-muted-foreground"> from {edu.institution}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Extraction Stats */}
+                {extractionConfidence && (
+                  <div className="mt-3 pt-3 border-t border-border flex gap-4 text-xs text-muted-foreground">
+                    <span>Skills: {extractionConfidence.skillsFound}</span>
+                    {extractionConfidence.projectsFound !== undefined && <span>Projects: {extractionConfidence.projectsFound}</span>}
+                    {extractionConfidence.experienceFound !== undefined && <span>Experience: {extractionConfidence.experienceFound}</span>}
+                    {extractionConfidence.educationFound !== undefined && <span>Education: {extractionConfidence.educationFound}</span>}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <Button className="mt-2" onClick={() => setInterviewStarted(true)}>
               Start Interview
               <ChevronRight className="w-4 h-4 ml-2" />
             </Button>
