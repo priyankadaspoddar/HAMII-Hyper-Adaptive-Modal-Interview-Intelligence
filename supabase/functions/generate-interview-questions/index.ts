@@ -33,54 +33,58 @@ serve(async (req) => {
       );
     }
 
-    const systemPrompt = `You are an expert HR interviewer. Your task is to analyze a candidate's resume using a structured extraction algorithm and generate interview questions ONLY based on information explicitly present in the resume.
+    const systemPrompt = `You are an expert HR interviewer using a STRICT EXTRACTION-BASED ALGORITHM called NER-KE (Named Entity Recognition & Keyword Extraction). You must ONLY use information explicitly written in the resume - NEVER invent, assume, or hallucinate any details.
 
-## EXTRACTION ALGORITHM (Follow this strictly):
+## ALGORITHM: NER-KE (Named Entity Recognition & Keyword Extraction)
 
-STEP 1 - Extract these fields from the resume:
-- NAME: Candidate's name
-- SKILLS: List all technical skills, tools, frameworks, languages mentioned
-- PROJECTS: List all project names and their descriptions
-- EXPERIENCE: List all job titles, companies, and responsibilities
-- EDUCATION: Degrees, institutions, certifications
-- ACHIEVEMENTS: Quantifiable accomplishments, awards, metrics
+### PHASE 1: ENTITY EXTRACTION (Parse resume line-by-line)
+Extract ONLY what is explicitly written - do NOT infer or assume:
+- PERSON_NAME: Extract candidate's name if present, otherwise use "The candidate"
+- SKILLS_LIST: Extract exact technology names, tools, frameworks, languages (e.g., "React", "Python", "AWS")
+- PROJECT_LIST: Extract exact project names and their described functionalities
+- ORGANIZATION_LIST: Extract company names, institution names
+- ROLE_LIST: Extract job titles, positions held
+- EDUCATION_LIST: Extract degrees, certifications, courses
+- METRICS_LIST: Extract numbers, percentages, achievements with quantifiable data
 
-STEP 2 - Generate questions using ONLY extracted information:
-- Question 1: Introduction question referencing their background
-- Question 2: Ask about a SPECIFIC project mentioned in the resume (use exact project name)
-- Question 3-${numberOfQuestions}: Ask about SPECIFIC skills, experiences, or achievements extracted
+### PHASE 2: CANDIDATE SUMMARY GENERATION (CRITICAL - NO HALLUCINATION)
+Create summary using ONLY extracted entities with this template:
+"[PERSON_NAME] has experience in [SKILLS_LIST]. [If PROJECT_LIST exists: 'Has worked on projects including [PROJECT_LIST].'] [If ORGANIZATION_LIST exists: 'Previous experience at [ORGANIZATION_LIST].'] [If EDUCATION_LIST exists: 'Education: [EDUCATION_LIST].']"
 
-## STRICT RULES:
-- NEVER invent or assume information not in the resume
-- ALWAYS reference specific items (project names, company names, technologies) from the resume
-- If the resume mentions "React", ask about React specifically, not generic frontend
-- If resume mentions "XYZ Company", reference that company in the question
-- Each question MUST quote or reference something directly from the resume
+STRICT SUMMARY RULES:
+- Use ONLY words and phrases that appear in the resume
+- If a field was NOT found, OMIT that sentence entirely
+- Do NOT add adjectives like "skilled", "experienced", "proficient" unless resume explicitly states them
+- Do NOT assume years of experience unless explicitly stated
+- Keep summary factual and directly traceable to resume text
 
-## OUTPUT FORMAT:
-For each question provide:
-- category: Introduction | Experience-based | Technical | Behavioral | Situational | Soft Skills
-- skillAssessed: The specific skill/competency being tested (from resume)
-- answerTip: Brief guidance (use STAR method for behavioral questions)`;
+### PHASE 3: QUESTION GENERATION (Reference-Based)
+Generate ${numberOfQuestions} questions where each MUST reference extracted entities:
+1. Introduction: "Tell me about yourself" - but tailor based on their specific [ROLE_LIST] and [SKILLS_LIST]
+2. Project-specific: Use EXACT name from [PROJECT_LIST] - "Tell me about your [PROJECT_NAME] project"
+3-${numberOfQuestions}: Each must reference a SPECIFIC item from SKILLS_LIST, ORGANIZATION_LIST, or METRICS_LIST
 
-    const userPrompt = `RESUME TO ANALYZE:
----
+## VALIDATION BEFORE OUTPUT:
+For candidateSummary: Can I highlight each phrase in the original resume? If NO, remove it.
+For each question: Does it contain a specific name/term from the resume? If NO, rewrite it.`;
+
+    const userPrompt = `RESUME TEXT FOR NER-KE EXTRACTION:
+"""
 ${resumeText}
----
+"""
 
-TASK: Generate exactly ${numberOfQuestions} interview questions.
+EXECUTE NER-KE ALGORITHM:
 
-MANDATORY STRUCTURE:
-1. Question 1: Introduction - "Tell me about yourself" tailored to their specific background
-2. Question 2: Project-specific - Ask about a SPECIFIC project mentioned in the resume by name
-3. Questions 3-${numberOfQuestions}: Must each reference a SPECIFIC skill, technology, company, or achievement from the resume
+STEP 1: Extract all entities from the resume above (parse each line)
+STEP 2: Generate candidateSummary using ONLY extracted entities - no assumptions, no embellishments
+STEP 3: Generate exactly ${numberOfQuestions} questions, each referencing specific extracted entities
 
-VALIDATION CHECKLIST (ensure each question passes):
-✓ Does this question reference something explicitly written in the resume?
-✓ Am I using the exact names/terms from the resume?
-✓ Would this question make sense ONLY for this specific candidate?
+CRITICAL VALIDATION BEFORE OUTPUT:
+□ Is every word in candidateSummary traceable to the resume? Remove any that aren't.
+□ Does each question contain a specific name, technology, or company from the resume?
+□ Have I avoided generic phrases like "your experience" in favor of specifics like "your experience at [Company Name]"?
 
-DO NOT generate generic questions. Every question must be traceable to resume content.`;
+OUTPUT: Return structured data with questions and candidateSummary based SOLELY on extracted resume content.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -120,12 +124,26 @@ DO NOT generate generic questions. Every question must be traceable to resume co
                       additionalProperties: false
                     }
                   },
+                  extractedEntities: {
+                    type: "object",
+                    description: "Entities extracted from the resume using NER-KE algorithm",
+                    properties: {
+                      name: { type: "string", description: "Candidate name extracted from resume" },
+                      skills: { type: "array", items: { type: "string" }, description: "Exact skills/technologies from resume" },
+                      projects: { type: "array", items: { type: "string" }, description: "Exact project names from resume" },
+                      organizations: { type: "array", items: { type: "string" }, description: "Company/institution names from resume" },
+                      roles: { type: "array", items: { type: "string" }, description: "Job titles from resume" },
+                      education: { type: "array", items: { type: "string" }, description: "Degrees/certifications from resume" }
+                    },
+                    required: ["skills"],
+                    additionalProperties: false
+                  },
                   candidateSummary: {
                     type: "string",
-                    description: "A brief summary of the candidate's profile based on the resume"
+                    description: "Summary generated ONLY from extracted entities - no assumptions or embellishments. Each phrase must be traceable to the resume."
                   }
                 },
-                required: ["questions", "candidateSummary"],
+                required: ["questions", "extractedEntities", "candidateSummary"],
                 additionalProperties: false
               }
             }
