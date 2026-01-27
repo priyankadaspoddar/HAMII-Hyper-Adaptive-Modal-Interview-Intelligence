@@ -5,8 +5,9 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure worker for pdfjs
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configure worker for pdfjs - use a fixed version that matches the installed package
+// Using unpkg for better reliability
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
 
 export interface ParsedResume {
   text: string;
