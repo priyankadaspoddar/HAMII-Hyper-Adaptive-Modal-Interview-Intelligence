@@ -15,6 +15,7 @@ import { SpeechRecognitionService, SpeechAnalyzer } from "@/lib/speechRecognitio
 import { ContentAnalyzer } from "@/lib/contentAnalysis";
 import { FusionAlgorithm } from "@/lib/fusionAlgorithm";
 import type { RawMetrics, FusedMetrics } from "@/lib/fusionAlgorithm";
+import { parseResume, validateResumeContent, type ParsedResume } from "@/lib/resumeParser";
 
 interface InterviewQuestion {
   question: string;
@@ -174,23 +175,45 @@ const InterviewPractice = () => {
     setIsParsingResume(true);
     
     try {
-      // For text files, read directly
-      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-        const text = await file.text();
-        setResumeText(text);
-        toast({ title: "Resume Uploaded", description: "Text file parsed successfully" });
-      } 
-      // For other files, try to extract text
-      else {
-        const text = await file.text();
-        setResumeText(text);
-        toast({ title: "Resume Uploaded", description: "File content extracted" });
+      // Use the efficient resume parser for all file types
+      const result = await parseResume(file);
+      
+      // Validate the parsed content
+      const validation = validateResumeContent(result);
+      
+      if (!result.success || !result.data) {
+        toast({ 
+          title: "Parse Error", 
+          description: result.error || "Could not parse the file.", 
+          variant: "destructive" 
+        });
+        return;
       }
+      
+      setResumeText(result.data.text);
+      
+      // Show appropriate toast based on file type and validation
+      const fileType = file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 
+                       file.name.toLowerCase().endsWith('.docx') ? 'DOCX' : 'Text';
+      
+      if (validation.isValid) {
+        toast({ 
+          title: `${fileType} Resume Parsed`, 
+          description: `${result.data.pageCount} page(s) extracted. ${result.data.sections ? 'Sections detected.' : ''}` 
+        });
+      } else {
+        toast({ 
+          title: "Resume Parsed", 
+          description: validation.message, 
+          variant: "destructive" 
+        });
+      }
+      
     } catch (error) {
       console.error("Error parsing resume:", error);
       toast({ 
         title: "Parse Error", 
-        description: "Could not parse the file. Try a .txt file.", 
+        description: error instanceof Error ? error.message : "Could not parse the file.", 
         variant: "destructive" 
       });
     } finally {
@@ -646,7 +669,7 @@ const InterviewPractice = () => {
                     {isParsingResume ? "Parsing Resume..." : "Upload Your Resume"}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Supports .txt files (PDF support coming soon)
+                    Supports PDF, DOCX, and TXT files
                   </p>
                 </label>
               </div>
