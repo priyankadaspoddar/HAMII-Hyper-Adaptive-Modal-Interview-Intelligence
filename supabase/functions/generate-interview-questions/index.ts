@@ -33,129 +33,39 @@ serve(async (req) => {
       );
     }
 
-    // Enhanced NER-KE Algorithm System Prompt
-    const systemPrompt = `You are an expert resume parser implementing the NER-KE (Named Entity Recognition & Keyword Extraction) Algorithm.
+    // Standard Interview Questions with Resume Context
+    const systemPrompt = `You are an expert interview coach. Your task is to extract key information from the resume and generate standard interview questions that are personalized based on the candidate's background.
 
-## ALGORITHM SPECIFICATION: NER-KE v2.0
+## EXTRACTION RULES (STRICT - NO HALLUCINATION):
+- Extract ONLY information explicitly written in the resume
+- Use EXACT names, skills, and terms as written
+- If information is not present, mark as empty or "NOT_FOUND"
 
-### CORE PRINCIPLE: ZERO HALLUCINATION
-You must ONLY extract and reference information that is EXPLICITLY written in the resume text.
-- If information is not present, mark it as "NOT_FOUND" or empty array
-- NEVER infer, assume, or generate any data not in the source text
-- Every extracted entity must have a direct text match in the resume
+## STANDARD INTERVIEW QUESTIONS TO GENERATE:
+You must generate exactly these 5 questions, personalized with resume context:
 
-### PHASE 1: TEXT PREPROCESSING
-1. Parse the resume text line-by-line
-2. Identify section boundaries (Education, Experience, Skills, Projects, etc.)
-3. Preserve original phrasing for extraction
+1. **"Tell me about yourself"** - Category: Introduction
+   - Tip should reference their background/skills from resume
 
-### PHASE 2: DETERMINISTIC ENTITY EXTRACTION
-Extract using pattern matching and keyword recognition:
+2. **"What are your strengths?"** - Category: Behavioral  
+   - Tip should suggest mentioning specific skills from their resume
 
-**PERSON_NAME**: Look for name at the top of resume or after "Name:" label
-**CONTACT_INFO**: Email patterns, phone patterns, LinkedIn URLs
+3. **"What are your weaknesses?"** - Category: Behavioral
+   - Tip should help them frame weaknesses constructively
 
-**SKILLS_LIST** (Technical & Soft):
-- Programming languages: Python, Java, JavaScript, C++, etc.
-- Frameworks: React, Angular, Django, Spring, etc.
-- Tools: Git, Docker, AWS, etc.
-- Extract EXACT spelling as written
+4. **"Why should we hire you over other qualified candidates?"** - Category: Behavioral
+   - Tip should reference their unique projects/experience from resume
 
-**PROJECT_LIST** with attributes:
-- Project name (EXACT as written)
-- Technologies used (ONLY those explicitly mentioned for this project)
-- Brief description (use original text, do not paraphrase)
-- Quantifiable outcomes if mentioned (numbers, percentages)
+5. **"Tell me about the projects you have worked on"** - Category: Project-Based
+   - Tip should specifically mention their actual project names from the resume`;
 
-**EXPERIENCE_LIST**:
-- Company/Organization name (EXACT)
-- Role/Title (EXACT)
-- Duration if mentioned
-- Key responsibilities (use original phrasing)
-
-**EDUCATION_LIST**:
-- Degree name (EXACT)
-- Institution name (EXACT)
-- Year/Duration if mentioned
-- GPA/Grades if mentioned
-
-**ACHIEVEMENTS_LIST**:
-- Certifications (EXACT names)
-- Awards (EXACT names)
-- Quantifiable metrics (numbers, percentages as written)
-
-### PHASE 3: TEMPLATE-BASED SUMMARY GENERATION
-Generate candidateSummary using ONLY this template:
-
-"[NAME or 'Candidate'] [has/with] [SKILLS count] technical skills including [TOP 3-5 SKILLS from SKILLS_LIST]. [IF EXPERIENCE: 'Experience at [ORGANIZATION names].''] [IF PROJECTS: 'Worked on [PROJECT count] projects including [PROJECT names].'] [IF EDUCATION: 'Education: [DEGREE] from [INSTITUTION].']"
-
-STRICT RULES:
-- Use ONLY words appearing in the resume
-- If a section is empty/NOT_FOUND, OMIT that part entirely
-- Do NOT add descriptors (skilled, proficient, expert) unless explicitly in resume
-- Do NOT assume experience levels or years
-
-### PHASE 4: ENTITY-ANCHORED QUESTION GENERATION
-Generate ${numberOfQuestions} questions where each MUST:
-
-1. **Introduction Question**: 
-   "Tell me about yourself and your background in [EXTRACTED_SKILL_DOMAIN]"
-   - Use actual skill domain from SKILLS_LIST
-
-2. **Project-Specific Question** (if projects exist):
-   "Can you walk me through your [EXACT_PROJECT_NAME] project? What was your role and what technologies did you use?"
-   - Use EXACT project name from PROJECT_LIST
-
-3. **Experience-Based Questions** (if experience exists):
-   "At [EXACT_COMPANY_NAME], you worked as [EXACT_ROLE]. Can you describe [specific responsibility from resume]?"
-   - Reference EXACT company and role
-
-4. **Technical Skill Questions**:
-   "You mentioned experience with [EXACT_SKILL]. How did you apply it in [EXACT_PROJECT or EXACT_ROLE]?"
-   - Cross-reference skills with projects/experience
-
-5. **Achievement/Metrics Questions** (if achievements exist):
-   "You achieved [EXACT_METRIC from resume]. How did you accomplish this?"
-   - Use EXACT numbers/percentages from resume
-
-### VALIDATION CHECKLIST (Must pass all):
-□ Every skill in summary exists in SKILLS_LIST extracted from resume
-□ Every project name matches EXACT spelling in resume
-□ Every company name matches EXACT spelling in resume
-□ Every metric/number was copied from resume text
-□ No adjectives added that weren't in original text
-□ candidateSummary contains ONLY traceable phrases`;
-
-    const userPrompt = `EXECUTE NER-KE ALGORITHM v2.0 ON THIS RESUME:
+    const userPrompt = `EXTRACT RESUME INFO AND GENERATE PERSONALIZED STANDARD QUESTIONS:
 
 ===== RESUME TEXT START =====
 ${resumeText}
 ===== RESUME TEXT END =====
 
-STEP-BY-STEP EXECUTION:
-
-STEP 1 - PREPROCESSING:
-- Parse each line of the resume
-- Identify section headers
-
-STEP 2 - ENTITY EXTRACTION:
-For each entity type, extract ONLY what is explicitly written.
-If not found, use empty array or "NOT_FOUND".
-
-STEP 3 - SUMMARY GENERATION:
-Create candidateSummary using ONLY the template and extracted entities.
-Omit any section where entities were not found.
-
-STEP 4 - QUESTION GENERATION:
-Generate exactly ${numberOfQuestions} questions, each anchored to specific extracted entities.
-Every question must contain at least one EXACT term from the resume.
-
-STEP 5 - VALIDATION:
-Before output, verify:
-- Can I ctrl+F find each extracted skill/project/company in the resume? YES/NO
-- Does each question contain a verbatim term from the resume? YES/NO
-
-OUTPUT the structured extraction result.`;
+Extract the candidate's name, skills, projects, and experience. Then generate the 5 standard interview questions with personalized tips based on their actual resume content.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -264,26 +174,22 @@ OUTPUT the structured extraction result.`;
                       properties: {
                         question: { 
                           type: "string", 
-                          description: "Interview question - MUST contain EXACT terms from resume" 
+                          description: "The standard interview question" 
                         },
                         category: { 
                           type: "string", 
-                          enum: ["Introduction", "Project-Based", "Experience-Based", "Technical", "Behavioral", "Achievement-Based"]
+                          enum: ["Introduction", "Behavioral", "Project-Based"]
                         },
                         skillAssessed: { 
                           type: "string", 
-                          description: "Skill being assessed - use EXACT skill name from resume" 
-                        },
-                        resumeReference: {
-                          type: "string",
-                          description: "The EXACT term/phrase from resume this question references"
+                          description: "General skill being assessed" 
                         },
                         answerTip: { 
                           type: "string", 
-                          description: "Tip for answering. Use STAR method for behavioral questions." 
+                          description: "Personalized tip based on resume content. Reference their actual skills/projects." 
                         }
                       },
-                      required: ["question", "category", "skillAssessed", "resumeReference", "answerTip"]
+                      required: ["question", "category", "skillAssessed", "answerTip"]
                     }
                   },
                   extractionConfidence: {
