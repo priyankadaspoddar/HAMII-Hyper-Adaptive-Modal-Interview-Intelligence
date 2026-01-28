@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.evaluate-interview-answer]
 verify_jwt = false
+
+[functions.summarize-interview-session]
+verify_jwt = false

@@ -16,6 +16,7 @@ import { ContentAnalyzer } from "@/lib/contentAnalysis";
 import { FusionAlgorithm } from "@/lib/fusionAlgorithm";
 import type { RawMetrics, FusedMetrics } from "@/lib/fusionAlgorithm";
 import { parseResume, validateResumeContent, type ParsedResume } from "@/lib/resumeParser";
+import { SessionSummary } from "@/components/SessionSummary";
 
 interface InterviewQuestion {
   question: string;
@@ -547,6 +548,12 @@ const InterviewPractice = () => {
               )}
             </div>
           </Card>
+
+          {/* AI Session Summary */}
+          <SessionSummary 
+            results={results} 
+            candidateName={extractedEntities?.name}
+          />
 
           {results.map((result, idx) => (
             <Card key={idx} className="p-6 bg-gradient-card border-border mb-4">
