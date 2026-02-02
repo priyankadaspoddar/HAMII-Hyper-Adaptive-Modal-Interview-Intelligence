@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { 
   Loader2, Sparkles, Trophy, Target, TrendingUp, 
-  CheckCircle, AlertTriangle, Lightbulb, Heart 
+  CheckCircle, AlertTriangle, Lightbulb, Heart, Download 
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import jsPDF from "jspdf";
 
 interface QuestionResult {
   question: {
@@ -128,6 +129,122 @@ export const SessionSummary = ({ results, candidateName }: SessionSummaryProps) 
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const exportToPdf = () => {
+    if (!summary) return;
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 20;
+    
+    // Title
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text("Interview Session Recap", margin, y);
+    y += 15;
+    
+    // Performance Rating
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Performance Rating: ${summary.performanceRating}`, margin, y);
+    y += 12;
+    
+    // Executive Summary
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    const summaryLines = doc.splitTextToSize(summary.executiveSummary, contentWidth);
+    doc.text(summaryLines, margin, y);
+    y += summaryLines.length * 6 + 10;
+    
+    // Top Strengths
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Top Strengths", margin, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    summary.topStrengths.forEach((strength) => {
+      const lines = doc.splitTextToSize(`• ${strength}`, contentWidth);
+      doc.text(lines, margin, y);
+      y += lines.length * 5 + 2;
+    });
+    y += 6;
+    
+    // Priority Improvements
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Priority Improvements", margin, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    summary.priorityImprovements.forEach((improvement) => {
+      const lines = doc.splitTextToSize(`• ${improvement}`, contentWidth);
+      doc.text(lines, margin, y);
+      y += lines.length * 5 + 2;
+    });
+    y += 6;
+    
+    // Check if we need a new page
+    if (y > 220) {
+      doc.addPage();
+      y = 20;
+    }
+    
+    // Delivery Analysis
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Delivery Analysis", margin, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    const deliveryLines = doc.splitTextToSize(summary.deliveryAnalysis, contentWidth);
+    doc.text(deliveryLines, margin, y);
+    y += deliveryLines.length * 5 + 10;
+    
+    // Content Quality
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Content Quality", margin, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    const contentLines = doc.splitTextToSize(summary.contentQuality, contentWidth);
+    doc.text(contentLines, margin, y);
+    y += contentLines.length * 5 + 10;
+    
+    // Check if we need a new page
+    if (y > 220) {
+      doc.addPage();
+      y = 20;
+    }
+    
+    // Action Plan
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Action Plan", margin, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    summary.actionPlan.forEach((action, i) => {
+      const lines = doc.splitTextToSize(`${i + 1}. ${action}`, contentWidth);
+      doc.text(lines, margin, y);
+      y += lines.length * 5 + 4;
+    });
+    y += 6;
+    
+    // Motivational Note
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "italic");
+    const noteLines = doc.splitTextToSize(`"${summary.motivationalNote}"`, contentWidth);
+    doc.text(noteLines, margin, y);
+    
+    // Save
+    doc.save("interview-session-recap.pdf");
+    
+    toast({ title: "PDF Downloaded", description: "Your session recap has been saved" });
   };
 
   if (!summary) {
@@ -263,6 +380,14 @@ export const SessionSummary = ({ results, candidateName }: SessionSummaryProps) 
           <p className="text-foreground italic">{summary.motivationalNote}</p>
         </div>
       </Card>
+
+      {/* Export PDF Button */}
+      <div className="text-center">
+        <Button onClick={exportToPdf} variant="outline" className="gap-2">
+          <Download className="w-4 h-4" />
+          Download PDF Report
+        </Button>
+      </div>
     </div>
   );
 };

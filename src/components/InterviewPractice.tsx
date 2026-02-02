@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { 
   Upload, FileText, Loader2, ArrowLeft, ArrowRight, 
   Camera, Mic, MicOff, Video, VideoOff, Square, 
-  CheckCircle, XCircle, ChevronRight, AlertCircle
+  CheckCircle, XCircle, ChevronRight, AlertCircle, SkipForward
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -478,6 +478,24 @@ const InterviewPractice = () => {
     }
   };
 
+  const skipQuestion = () => {
+    // Save result with no answer
+    const currentQuestion = questions[currentQuestionIndex];
+    setResults(prev => [...prev, {
+      question: currentQuestion,
+      answer: "(Skipped - No speech detected)",
+      evaluation: null,
+      metrics: null
+    }]);
+    
+    toast({ 
+      title: "Question Skipped", 
+      description: "Moving to next question" 
+    });
+    
+    nextQuestion();
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
@@ -922,10 +940,15 @@ const InterviewPractice = () => {
                       </Button>
 
                       {!isRecording && !hasAnsweredCurrent ? (
-                        <Button size="lg" onClick={startRecording} disabled={!modelsLoaded || isEvaluating}>
-                          <Video className="w-5 h-5 mr-2" />
-                          {modelsLoaded ? "Start Answer" : "Loading..."}
-                        </Button>
+                        <>
+                          <Button size="lg" onClick={startRecording} disabled={!modelsLoaded || isEvaluating}>
+                            <Video className="w-5 h-5 mr-2" />
+                            {modelsLoaded ? "Start Answer" : "Loading..."}
+                          </Button>
+                          <Button size="lg" variant="outline" onClick={skipQuestion} disabled={isEvaluating}>
+                            <SkipForward className="w-5 h-5 mr-2" /> Skip Question
+                          </Button>
+                        </>
                       ) : isRecording ? (
                         <Button size="lg" variant="destructive" onClick={stopRecording}>
                           <Square className="w-5 h-5 mr-2" /> Submit Answer
