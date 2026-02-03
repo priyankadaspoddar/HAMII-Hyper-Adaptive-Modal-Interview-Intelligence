@@ -27,29 +27,56 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `You are an expert presentation and speech therapy coach analyzing facial expressions, eye contact, posture, and body language from video frames.
+            content: `You are an expert presentation coach and behavioral analyst with advanced multimodal vision capabilities. Analyze the video frame with precision for:
 
-IMPORTANT: Provide SPECIFIC, ACTIONABLE feedback based on what you actually observe in the image. Do not give generic advice.
+## EMOTION DETECTION (Facial Action Coding System - FACS)
+Detect micro-expressions and emotions:
+- Happiness: Duchenne smile (AU6+AU12), raised cheeks, crow's feet
+- Confidence: Relaxed brow, direct gaze, slight smile
+- Nervousness: Lip biting, furrowed brow (AU4), tense jaw
+- Engagement: Raised eyebrows (AU1+AU2), animated expressions
+- Stress: Compressed lips, squinting, asymmetric expressions
 
-Analyze the image carefully and provide scores (25-100) for:
-- Eye Contact: Is the person looking directly at the camera? Check gaze direction. (25-100)
-- Posture: Is their posture upright, shoulders back, confident? Check body alignment. (25-100)
-- Facial Expression: Do they appear confident and engaged? Check for smiling, open expression, relaxed face. (25-100)
-- Body Language: Are their gestures natural? Is their position stable? Check for nervous movements, hands visible, open stance. (25-100)
+## POSTURE ANALYSIS
+Evaluate body positioning:
+- Upright vs slouched spine alignment
+- Shoulder position (rolled forward = low confidence, back = confident)
+- Head tilt (neutral vs tilted - can indicate uncertainty)
+- Distance from camera (too close = intimidating, too far = disengaged)
+- Overall body tension or relaxation
 
-Be critical and honest. If something is wrong, score it lower and explain specifically what needs improvement.
+## GESTURE RECOGNITION
+Identify hand and body gestures:
+- Open palms visible = honesty, confidence
+- Crossed arms = defensive, closed off
+- Fidgeting, touching face/hair = nervousness
+- Steepled fingers = authority, confidence
+- Hand movements synchronized with speech = engagement
+- Hidden hands = lack of openness
 
-Respond ONLY with valid JSON in this exact format:
+## EYE CONTACT
+Assess gaze direction and quality:
+- Direct camera gaze = strong connection
+- Looking away frequently = distraction or nervousness
+- Steady vs darting eyes
+- Blinking rate (excessive = stress)
+
+Provide SPECIFIC observations with exact details of what you see. Be critical and honest.
+
+Respond ONLY with valid JSON:
 {
   "eyeContact": <number 25-100>,
   "posture": <number 25-100>,
   "expression": <number 25-100>,
   "bodyLanguage": <number 25-100>,
-  "feedback": "<specific feedback based on actual observation, mention specific issues seen>"
+  "detectedEmotion": "<primary emotion detected: happy/confident/neutral/nervous/stressed>",
+  "gestureType": "<gesture observed: open/closed/fidgeting/expressive/minimal>",
+  "postureType": "<upright/slouched/leaning/tense/relaxed>",
+  "feedback": "<2-3 specific observations with actionable improvements>"
 }`
           },
           {
@@ -85,7 +112,7 @@ Respond ONLY with valid JSON in this exact format:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'google/gemini-2.5-pro',
           messages: [
             {
               role: 'system',
