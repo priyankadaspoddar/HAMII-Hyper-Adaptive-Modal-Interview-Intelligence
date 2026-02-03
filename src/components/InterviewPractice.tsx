@@ -118,6 +118,11 @@ const InterviewPractice = () => {
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [aiVisionMetrics, setAiVisionMetrics] = useState<{
+    detectedEmotion?: string;
+    gestureType?: string;
+    postureType?: string;
+  } | null>(null);
   
   // Refs
   const visionAnalyzerRef = useRef<VisionAnalyzer | null>(null);
@@ -128,6 +133,8 @@ const InterviewPractice = () => {
   const fusionAlgorithmRef = useRef<FusionAlgorithm>(new FusionAlgorithm());
   const animationFrameRef = useRef<number | null>(null);
   const metricsHistoryRef = useRef<FusedMetrics[]>([]);
+  const aiAnalysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAiAnalysisRef = useRef<number>(0);
 
   // Initialize models
   useEffect(() => {
@@ -293,6 +300,90 @@ const InterviewPractice = () => {
     }
   };
 
+  // AI-powered vision analysis using Gemini 2.5 Pro
+  const runAiVisionAnalysis = async () => {
+    if (!videoRef.current || !isRecording) return;
+    
+    const video = videoRef.current;
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+    
+    // Rate limit: only run every 3 seconds
+    const now = Date.now();
+    if (now - lastAiAnalysisRef.current < 3000) return;
+    lastAiAnalysisRef.current = now;
+    
+    try {
+      // Capture frame as base64
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      ctx.drawImage(video, 0, 0);
+      const imageData = canvas.toDataURL('image/jpeg', 0.7);
+      
+      // Call Gemini 2.5 Pro for enhanced analysis
+      const { data, error } = await supabase.functions.invoke('analyze-presentation', {
+        body: { 
+          imageData, 
+          transcript: transcript + ' ' + interimTranscript
+        }
+      });
+      
+      if (error) {
+        console.error('AI vision analysis error:', error);
+        return;
+      }
+      
+      if (data?.vision) {
+        // Update AI-specific metrics
+        setAiVisionMetrics({
+          detectedEmotion: data.vision.detectedEmotion,
+          gestureType: data.vision.gestureType,
+          postureType: data.vision.postureType,
+        });
+        
+        // Blend AI scores with local metrics for better accuracy
+        if (metricsHistoryRef.current.length > 0) {
+          const lastMetrics = metricsHistoryRef.current[metricsHistoryRef.current.length - 1];
+          const blendedMetrics: FusedMetrics = {
+            eyeContact: Math.round((lastMetrics.eyeContact * 0.3) + (data.vision.eyeContact * 0.7)),
+            posture: Math.round((lastMetrics.posture * 0.3) + (data.vision.posture * 0.7)),
+            bodyLanguage: Math.round((lastMetrics.bodyLanguage * 0.3) + (data.vision.bodyLanguage * 0.7)),
+            facialExpression: Math.round((lastMetrics.facialExpression * 0.3) + (data.vision.expression * 0.7)),
+            voiceQuality: data.voice?.tone || lastMetrics.voiceQuality,
+            speechClarity: data.voice?.clarity || lastMetrics.speechClarity,
+            contentEngagement: data.voice?.engagement || lastMetrics.contentEngagement,
+            overallScore: data.overall || lastMetrics.overallScore,
+            confidence: lastMetrics.confidence,
+          };
+          setCurrentMetrics(blendedMetrics);
+          metricsHistoryRef.current.push(blendedMetrics);
+        } else {
+          // First metrics - use AI directly
+          const aiMetrics: FusedMetrics = {
+            eyeContact: data.vision.eyeContact,
+            posture: data.vision.posture,
+            bodyLanguage: data.vision.bodyLanguage,
+            facialExpression: data.vision.expression,
+            voiceQuality: data.voice?.tone || 50,
+            speechClarity: data.voice?.clarity || 50,
+            contentEngagement: data.voice?.engagement || 50,
+            overallScore: data.overall,
+            confidence: 80,
+          };
+          setCurrentMetrics(aiMetrics);
+          metricsHistoryRef.current.push(aiMetrics);
+        }
+        
+        console.log('AI Vision Analysis:', data.vision.detectedEmotion, data.vision.gestureType, data.vision.postureType);
+      }
+    } catch (error) {
+      console.error('AI vision analysis failed:', error);
+    }
+  };
+
   const startRecording = () => {
     if (!isCameraOn || !stream) return;
 
@@ -303,6 +394,8 @@ const InterviewPractice = () => {
     metricsHistoryRef.current = [];
     speechAnalyzerRef.current.reset();
     fusionAlgorithmRef.current.reset();
+    setAiVisionMetrics(null);
+    lastAiAnalysisRef.current = 0;
 
     audioAnalyzerRef.current = new AudioAnalyzer();
     audioAnalyzerRef.current.initialize(stream);
@@ -310,6 +403,14 @@ const InterviewPractice = () => {
     if (speechRecognitionRef.current) {
       speechRecognitionRef.current.start();
     }
+    
+    // Start AI vision analysis interval (every 3 seconds)
+    aiAnalysisIntervalRef.current = setInterval(() => {
+      runAiVisionAnalysis();
+    }, 3000);
+    
+    // Run first analysis after 1 second
+    setTimeout(() => runAiVisionAnalysis(), 1000);
 
     // Start analysis loop
     const analyzeFrame = async () => {
@@ -373,6 +474,7 @@ const InterviewPractice = () => {
     if (speechRecognitionRef.current) speechRecognitionRef.current.stop();
     if (audioAnalyzerRef.current) audioAnalyzerRef.current.cleanup();
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    if (aiAnalysisIntervalRef.current) clearInterval(aiAnalysisIntervalRef.current);
 
     // Calculate average metrics
     const avgMetrics = calculateAverageMetrics();
@@ -980,6 +1082,48 @@ const InterviewPractice = () => {
                   </div>
                 ) : isRecording && currentMetrics ? (
                   <div className="space-y-4">
+                    {/* AI Vision Indicators */}
+                    {aiVisionMetrics && (
+                      <div className="mb-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                        <p className="text-xs text-muted-foreground mb-2">Gemini 2.5 Pro Analysis</p>
+                        <div className="flex flex-wrap gap-2">
+                          {aiVisionMetrics.detectedEmotion && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              aiVisionMetrics.detectedEmotion === 'happy' || aiVisionMetrics.detectedEmotion === 'confident' 
+                                ? 'bg-accent text-accent-foreground' 
+                                : aiVisionMetrics.detectedEmotion === 'nervous' || aiVisionMetrics.detectedEmotion === 'stressed'
+                                ? 'bg-destructive/20 text-destructive'
+                                : 'bg-muted text-muted-foreground'
+                            }`}>
+                              😊 {aiVisionMetrics.detectedEmotion}
+                            </span>
+                          )}
+                          {aiVisionMetrics.gestureType && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              aiVisionMetrics.gestureType === 'open' || aiVisionMetrics.gestureType === 'expressive'
+                                ? 'bg-accent text-accent-foreground'
+                                : aiVisionMetrics.gestureType === 'closed' || aiVisionMetrics.gestureType === 'fidgeting'
+                                ? 'bg-destructive/20 text-destructive'
+                                : 'bg-muted text-muted-foreground'
+                            }`}>
+                              👐 {aiVisionMetrics.gestureType}
+                            </span>
+                          )}
+                          {aiVisionMetrics.postureType && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              aiVisionMetrics.postureType === 'upright' || aiVisionMetrics.postureType === 'relaxed'
+                                ? 'bg-accent text-accent-foreground'
+                                : aiVisionMetrics.postureType === 'slouched' || aiVisionMetrics.postureType === 'tense'
+                                ? 'bg-destructive/20 text-destructive'
+                                : 'bg-muted text-muted-foreground'
+                            }`}>
+                              🧍 {aiVisionMetrics.postureType}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     {(['eyeContact', 'posture', 'speechClarity', 'bodyLanguage', 'voiceQuality'] as const).map(key => (
                       <div key={key}>
                         <div className="flex justify-between mb-1">
