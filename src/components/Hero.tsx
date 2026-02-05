@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles } from "lucide-react";
+ import { ArrowRight, Sparkles, Users } from "lucide-react";
 
 const Hero = () => {
   return (
@@ -35,8 +35,14 @@ const Hero = () => {
             Start Practicing Free
             <ArrowRight className="ml-2 w-5 h-5" />
           </Button>
-          <Button size="lg" variant="outline" className="border-border hover:bg-secondary text-lg px-8 py-6">
-            Watch Demo
+           <Button 
+             size="lg" 
+             variant="outline" 
+             onClick={() => window.location.href = '/hr-interview'}
+             className="border-border hover:bg-secondary text-lg px-8 py-6"
+           >
+             <Users className="mr-2 w-5 h-5" />
+             HR Interview Practice
           </Button>
         </div>
 
