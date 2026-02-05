@@ -1,0 +1,922 @@
+ import { useState, useRef, useEffect, useCallback } from "react";
+ import { useNavigate } from "react-router-dom";
+ import { Button } from "@/components/ui/button";
+ import { Card } from "@/components/ui/card";
+ import { Progress } from "@/components/ui/progress";
+ import { Badge } from "@/components/ui/badge";
+ import { 
+   Camera, Mic, MicOff, Video, VideoOff, Square, ArrowLeft, 
+   Loader2, Play, SkipForward, CheckCircle, ChevronRight, AlertCircle
+ } from "lucide-react";
+ import { useToast } from "@/components/ui/use-toast";
+ import { supabase } from "@/integrations/supabase/client";
+ import { VisionAnalyzer } from "@/lib/visionAnalysis";
+ import { AudioAnalyzer } from "@/lib/audioAnalysis";
+ import { SpeechRecognitionService, SpeechAnalyzer } from "@/lib/speechRecognition";
+ import { FusionAlgorithm } from "@/lib/fusionAlgorithm";
+ import type { RawMetrics, FusedMetrics } from "@/lib/fusionAlgorithm";
+ import HRInterviewSummary from "./HRInterviewSummary";
+ 
+ interface HRQuestion {
+   question: string;
+   category: string;
+   role: string;
+   experience: string;
+   difficulty: string;
+   source_type: string;
+   ideal_answer: string;
+   keywords: string[];
+   improved_question: string;
+ }
+ 
+ interface HRQuestionResult {
+   question: string;
+   category: string;
+   answer: string;
+   evaluation: {
+     contentScore: number;
+     deliveryScore: number;
+     overallScore: number;
+     starBreakdown: { situation: number; task: number; action: number; result: number };
+     strengths: string[];
+     improvements: string[];
+     feedback: string;
+     quickTip: string;
+   } | null;
+   emotionHistory: string[];
+   avgMetrics: {
+     eyeContact: number;
+     posture: number;
+     bodyLanguage: number;
+     facialExpression: number;
+   };
+ }
+ 
+ const HRInterview = () => {
+   const navigate = useNavigate();
+   const { toast } = useToast();
+ 
+   // Interview state
+   const [questions, setQuestions] = useState<HRQuestion[]>([]);
+   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+   const [isLoading, setIsLoading] = useState(true);
+   const [interviewStarted, setInterviewStarted] = useState(false);
+   const [results, setResults] = useState<HRQuestionResult[]>([]);
+   const [showSummary, setShowSummary] = useState(false);
+   const [totalDuration, setTotalDuration] = useState(0);
+ 
+   // Recording state
+   const videoRef = useRef<HTMLVideoElement>(null);
+   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+   const [isRecording, setIsRecording] = useState(false);
+   const [isCameraOn, setIsCameraOn] = useState(false);
+   const [isMicOn, setIsMicOn] = useState(false);
+   const [stream, setStream] = useState<MediaStream | null>(null);
+   const [recordingTime, setRecordingTime] = useState(0);
+   const [modelsLoaded, setModelsLoaded] = useState(false);
+ 
+   // Metrics state
+   const [currentMetrics, setCurrentMetrics] = useState<FusedMetrics | null>(null);
+   const [transcript, setTranscript] = useState("");
+   const [interimTranscript, setInterimTranscript] = useState("");
+   const [isEvaluating, setIsEvaluating] = useState(false);
+   const [currentFeedback, setCurrentFeedback] = useState<string | null>(null);
+   const [aiVisionMetrics, setAiVisionMetrics] = useState<{
+     detectedEmotion?: string;
+     gestureType?: string;
+     postureType?: string;
+   } | null>(null);
+ 
+   // Refs
+   const visionAnalyzerRef = useRef<VisionAnalyzer | null>(null);
+   const audioAnalyzerRef = useRef<AudioAnalyzer | null>(null);
+   const speechRecognitionRef = useRef<SpeechRecognitionService | null>(null);
+   const speechAnalyzerRef = useRef<SpeechAnalyzer>(new SpeechAnalyzer());
+   const fusionAlgorithmRef = useRef<FusionAlgorithm>(new FusionAlgorithm());
+   const animationFrameRef = useRef<number | null>(null);
+   const metricsHistoryRef = useRef<FusedMetrics[]>([]);
+   const emotionHistoryRef = useRef<string[]>([]);
+   const aiAnalysisIntervalRef = useRef<NodeJS.Timeout | null>(null);
+   const lastAiAnalysisRef = useRef<number>(0);
+   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+   const totalTimerRef = useRef<NodeJS.Timeout | null>(null);
+ 
+   // Load questions on mount
+   useEffect(() => {
+     const loadQuestions = async () => {
+       try {
+         const response = await fetch('/data/hr_interview_questions.json');
+         const allQuestions: HRQuestion[] = await response.json();
+ 
+         // Select 5 random questions with different categories
+         const selectedQuestions = selectDiverseQuestions(allQuestions, 5);
+         setQuestions(selectedQuestions);
+         setIsLoading(false);
+       } catch (error) {
+         console.error('Failed to load questions:', error);
+         toast({ 
+           title: "Error Loading Questions", 
+           description: "Could not load HR interview questions", 
+           variant: "destructive" 
+         });
+       }
+     };
+ 
+     loadQuestions();
+   }, [toast]);
+ 
+   // Select diverse questions (prefer different categories)
+   const selectDiverseQuestions = (allQuestions: HRQuestion[], count: number): HRQuestion[] => {
+     const categories = [...new Set(allQuestions.map(q => q.category))];
+     const selected: HRQuestion[] = [];
+     const usedCategories = new Set<string>();
+ 
+     // First pass: one from each category
+     for (const cat of categories) {
+       if (selected.length >= count) break;
+       const catQuestions = allQuestions.filter(q => q.category === cat);
+       const randomQ = catQuestions[Math.floor(Math.random() * catQuestions.length)];
+       if (randomQ && !usedCategories.has(cat)) {
+         selected.push(randomQ);
+         usedCategories.add(cat);
+       }
+     }
+ 
+     // Second pass: fill remaining with random
+     while (selected.length < count) {
+       const remaining = allQuestions.filter(q => !selected.includes(q));
+       if (remaining.length === 0) break;
+       const randomQ = remaining[Math.floor(Math.random() * remaining.length)];
+       selected.push(randomQ);
+     }
+ 
+     return selected;
+   };
+ 
+   // Initialize models
+   useEffect(() => {
+     const init = async () => {
+       try {
+         console.log("Initializing AI models for HR interview...");
+         visionAnalyzerRef.current = new VisionAnalyzer();
+         await visionAnalyzerRef.current.initialize();
+         setModelsLoaded(true);
+ 
+         const speechService = new SpeechRecognitionService();
+         if (speechService.isSupported()) {
+           speechRecognitionRef.current = speechService;
+           speechService.onTranscript((text, isFinal) => {
+             if (isFinal) {
+               setTranscript(prev => prev + ' ' + text);
+               setInterimTranscript('');
+             } else {
+               setInterimTranscript(text);
+             }
+           });
+         }
+       } catch (error) {
+         console.error("Model init error:", error);
+         setModelsLoaded(true);
+       }
+     };
+     init();
+ 
+     // Set context for behavioral interviews
+     fusionAlgorithmRef.current.setContext('job-seekers');
+ 
+     return () => {
+       if (visionAnalyzerRef.current) visionAnalyzerRef.current.cleanup();
+       if (audioAnalyzerRef.current) audioAnalyzerRef.current.cleanup();
+       if (speechRecognitionRef.current) speechRecognitionRef.current.stop();
+       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+       if (totalTimerRef.current) clearInterval(totalTimerRef.current);
+       if (aiAnalysisIntervalRef.current) clearInterval(aiAnalysisIntervalRef.current);
+     };
+   }, []);
+ 
+   const startCamera = async () => {
+     try {
+       const mediaStream = await navigator.mediaDevices.getUserMedia({
+         video: { width: 1280, height: 720 },
+         audio: true,
+       });
+       if (videoRef.current) videoRef.current.srcObject = mediaStream;
+       setStream(mediaStream);
+       setIsCameraOn(true);
+       setIsMicOn(true);
+       toast({ title: "Camera Ready", description: "Ready to start your HR interview" });
+     } catch (error) {
+       console.error("Camera error:", error);
+       toast({ title: "Camera Access Denied", description: "Please allow camera access", variant: "destructive" });
+     }
+   };
+ 
+   const stopCamera = () => {
+     if (stream) {
+       stream.getTracks().forEach(track => track.stop());
+       setStream(null);
+       setIsCameraOn(false);
+       setIsMicOn(false);
+     }
+   };
+ 
+   const toggleMicrophone = () => {
+     if (stream) {
+       stream.getAudioTracks().forEach(track => { track.enabled = !track.enabled; });
+       setIsMicOn(!isMicOn);
+     }
+   };
+ 
+   const startInterview = () => {
+     if (!isCameraOn) {
+       toast({ title: "Camera Required", description: "Please enable your camera first", variant: "destructive" });
+       return;
+     }
+     setInterviewStarted(true);
+     setResults([]);
+     setCurrentQuestionIndex(0);
+     setTotalDuration(0);
+ 
+     // Start total duration timer
+     totalTimerRef.current = setInterval(() => {
+       setTotalDuration(prev => prev + 1);
+     }, 1000);
+   };
+ 
+   // AI Vision Analysis using Gemini 2.5 Pro
+   const runAiVisionAnalysis = async () => {
+     if (!videoRef.current || !isRecording) return;
+ 
+     const video = videoRef.current;
+     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+ 
+     const now = Date.now();
+     if (now - lastAiAnalysisRef.current < 3000) return;
+     lastAiAnalysisRef.current = now;
+ 
+     try {
+       const canvas = document.createElement('canvas');
+       canvas.width = video.videoWidth;
+       canvas.height = video.videoHeight;
+       const ctx = canvas.getContext('2d');
+       if (!ctx) return;
+ 
+       ctx.drawImage(video, 0, 0);
+       const imageData = canvas.toDataURL('image/jpeg', 0.7);
+ 
+       const { data, error } = await supabase.functions.invoke('analyze-presentation', {
+         body: { imageData, transcript: transcript + ' ' + interimTranscript }
+       });
+ 
+       if (error) {
+         console.error('AI vision analysis error:', error);
+         return;
+       }
+ 
+       if (data?.vision) {
+         const detectedEmotion = data.vision.detectedEmotion;
+         setAiVisionMetrics({
+           detectedEmotion,
+           gestureType: data.vision.gestureType,
+           postureType: data.vision.postureType,
+         });
+ 
+         // Track emotion history
+         if (detectedEmotion) {
+           emotionHistoryRef.current.push(detectedEmotion);
+         }
+ 
+         // Blend metrics
+         if (metricsHistoryRef.current.length > 0) {
+           const lastMetrics = metricsHistoryRef.current[metricsHistoryRef.current.length - 1];
+           const blendedMetrics: FusedMetrics = {
+             eyeContact: Math.round((lastMetrics.eyeContact * 0.3) + (data.vision.eyeContact * 0.7)),
+             posture: Math.round((lastMetrics.posture * 0.3) + (data.vision.posture * 0.7)),
+             bodyLanguage: Math.round((lastMetrics.bodyLanguage * 0.3) + (data.vision.bodyLanguage * 0.7)),
+             facialExpression: Math.round((lastMetrics.facialExpression * 0.3) + (data.vision.expression * 0.7)),
+             voiceQuality: data.voice?.tone || lastMetrics.voiceQuality,
+             speechClarity: data.voice?.clarity || lastMetrics.speechClarity,
+             contentEngagement: data.voice?.engagement || lastMetrics.contentEngagement,
+             overallScore: data.overall || lastMetrics.overallScore,
+             confidence: lastMetrics.confidence,
+           };
+           setCurrentMetrics(blendedMetrics);
+           metricsHistoryRef.current.push(blendedMetrics);
+         }
+       }
+     } catch (error) {
+       console.error('AI vision analysis failed:', error);
+     }
+   };
+ 
+   const startRecording = () => {
+     if (!isCameraOn || !stream) return;
+ 
+     setIsRecording(true);
+     setRecordingTime(0);
+     setTranscript("");
+     setInterimTranscript("");
+     setCurrentFeedback(null);
+     metricsHistoryRef.current = [];
+     emotionHistoryRef.current = [];
+     speechAnalyzerRef.current.reset();
+     fusionAlgorithmRef.current.reset();
+     setAiVisionMetrics(null);
+     lastAiAnalysisRef.current = 0;
+ 
+     audioAnalyzerRef.current = new AudioAnalyzer();
+     audioAnalyzerRef.current.initialize(stream);
+ 
+     if (speechRecognitionRef.current) {
+       speechRecognitionRef.current.start();
+     }
+ 
+     // Recording timer
+     timerIntervalRef.current = setInterval(() => {
+       setRecordingTime(prev => prev + 1);
+     }, 1000);
+ 
+     // Start AI analysis interval
+     aiAnalysisIntervalRef.current = setInterval(() => {
+       runAiVisionAnalysis();
+     }, 3000);
+     setTimeout(() => runAiVisionAnalysis(), 1000);
+ 
+     // Start local analysis loop
+     const analyzeFrame = async () => {
+       if (!videoRef.current || !isRecording) return;
+ 
+       const video = videoRef.current;
+       if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+         animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+         return;
+       }
+ 
+       try {
+         const timestamp = performance.now();
+         const visionMetrics = visionAnalyzerRef.current
+           ? await visionAnalyzerRef.current.analyzeFrame(video, timestamp)
+           : null;
+ 
+         const audioFeatures = audioAnalyzerRef.current?.getAudioFeatures() || null;
+         const speechMetrics = speechAnalyzerRef.current.getMetrics();
+ 
+         if (visionMetrics && audioFeatures) {
+           const rawMetrics: RawMetrics = {
+             eyeContact: visionMetrics.face.eyeContact,
+             emotion: visionMetrics.face.emotion,
+             emotionConfidence: visionMetrics.face.emotionConfidence,
+             postureScore: visionMetrics.posture.postureScore,
+             shoulderAlignment: visionMetrics.posture.shoulderAlignment,
+             headPosition: visionMetrics.posture.headPosition,
+             gestureVariety: visionMetrics.gestures.gestureVariety,
+             handVisibility: visionMetrics.gestures.handVisibility,
+             pitch: audioFeatures.pitch,
+             pitchVariation: audioFeatures.pitchVariation,
+             volume: audioFeatures.volume,
+             volumeVariation: audioFeatures.volumeVariation,
+             clarity: audioFeatures.clarity,
+             energy: audioFeatures.energy,
+             wordsPerMinute: speechMetrics.wordsPerMinute,
+             fillerCount: speechMetrics.fillerCount,
+             fillerPercentage: speechMetrics.fillerPercentage,
+             clarityScore: speechMetrics.clarityScore,
+             fluencyScore: speechMetrics.fluencyScore,
+             articulationScore: speechMetrics.articulationScore,
+           };
+ 
+           const fused = fusionAlgorithmRef.current.fuse(rawMetrics);
+           setCurrentMetrics(fused);
+           metricsHistoryRef.current.push(fused);
+         }
+       } catch (error) {
+         console.error("Analysis error:", error);
+       }
+ 
+       animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+     };
+ 
+     analyzeFrame();
+   };
+ 
+   const stopRecording = async () => {
+     setIsRecording(false);
+     if (speechRecognitionRef.current) speechRecognitionRef.current.stop();
+     if (audioAnalyzerRef.current) audioAnalyzerRef.current.cleanup();
+     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+     if (aiAnalysisIntervalRef.current) clearInterval(aiAnalysisIntervalRef.current);
+ 
+     // Calculate average metrics
+     const avgMetrics = calculateAverageMetrics();
+ 
+     // Evaluate the answer
+     await evaluateAnswer(avgMetrics);
+   };
+ 
+   const calculateAverageMetrics = () => {
+     const history = metricsHistoryRef.current;
+     if (history.length === 0) {
+       return { eyeContact: 0, posture: 0, bodyLanguage: 0, facialExpression: 0 };
+     }
+ 
+     return {
+       eyeContact: Math.round(history.reduce((sum, m) => sum + m.eyeContact, 0) / history.length),
+       posture: Math.round(history.reduce((sum, m) => sum + m.posture, 0) / history.length),
+       bodyLanguage: Math.round(history.reduce((sum, m) => sum + m.bodyLanguage, 0) / history.length),
+       facialExpression: Math.round(history.reduce((sum, m) => sum + m.facialExpression, 0) / history.length),
+     };
+   };
+ 
+   const evaluateAnswer = async (avgMetrics: ReturnType<typeof calculateAverageMetrics>) => {
+     const currentQuestion = questions[currentQuestionIndex];
+     if (!currentQuestion) return;
+ 
+     setIsEvaluating(true);
+ 
+     try {
+       const { data, error } = await supabase.functions.invoke('evaluate-hr-answer', {
+         body: {
+           question: currentQuestion.improved_question,
+           category: currentQuestion.category,
+           answer: transcript.trim(),
+           idealAnswer: currentQuestion.ideal_answer,
+           keywords: currentQuestion.keywords,
+           visionMetrics: {
+             ...avgMetrics,
+             detectedEmotion: aiVisionMetrics?.detectedEmotion,
+             gestureType: aiVisionMetrics?.gestureType,
+             postureType: aiVisionMetrics?.postureType,
+           },
+           emotionHistory: emotionHistoryRef.current,
+         }
+       });
+ 
+       if (error) throw error;
+ 
+       // Store result
+       const result: HRQuestionResult = {
+         question: currentQuestion.improved_question,
+         category: currentQuestion.category,
+         answer: transcript.trim(),
+         evaluation: data,
+         emotionHistory: [...emotionHistoryRef.current],
+         avgMetrics,
+       };
+ 
+       setResults(prev => [...prev, result]);
+       setCurrentFeedback(data.feedback);
+ 
+       toast({
+         title: `Score: ${data.overallScore}%`,
+         description: data.quickTip,
+       });
+ 
+     } catch (error: any) {
+       console.error('Evaluation error:', error);
+       toast({ 
+         title: "Evaluation Error", 
+         description: error.message || "Could not evaluate answer", 
+         variant: "destructive" 
+       });
+       
+       // Store result without evaluation
+       const result: HRQuestionResult = {
+         question: currentQuestion.improved_question,
+         category: currentQuestion.category,
+         answer: transcript.trim(),
+         evaluation: null,
+         emotionHistory: [...emotionHistoryRef.current],
+         avgMetrics,
+       };
+       setResults(prev => [...prev, result]);
+     } finally {
+       setIsEvaluating(false);
+     }
+   };
+ 
+   const nextQuestion = () => {
+     if (currentQuestionIndex < questions.length - 1) {
+       setCurrentQuestionIndex(prev => prev + 1);
+       setTranscript("");
+       setInterimTranscript("");
+       setCurrentFeedback(null);
+       setCurrentMetrics(null);
+       setAiVisionMetrics(null);
+     } else {
+       // End interview
+       if (totalTimerRef.current) clearInterval(totalTimerRef.current);
+       stopCamera();
+       setShowSummary(true);
+     }
+   };
+ 
+   const skipQuestion = () => {
+     // Store skipped result
+     const currentQuestion = questions[currentQuestionIndex];
+     if (currentQuestion) {
+       const result: HRQuestionResult = {
+         question: currentQuestion.improved_question,
+         category: currentQuestion.category,
+         answer: "(Skipped)",
+         evaluation: null,
+         emotionHistory: [],
+         avgMetrics: { eyeContact: 0, posture: 0, bodyLanguage: 0, facialExpression: 0 },
+       };
+       setResults(prev => [...prev, result]);
+     }
+     nextQuestion();
+   };
+ 
+   const restartInterview = () => {
+     setShowSummary(false);
+     setResults([]);
+     setCurrentQuestionIndex(0);
+     setInterviewStarted(false);
+     setTotalDuration(0);
+     // Reload new questions
+     window.location.reload();
+   };
+ 
+   const formatTime = (seconds: number) => {
+     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+     const secs = (seconds % 60).toString().padStart(2, '0');
+     return `${mins}:${secs}`;
+   };
+ 
+   const getEmotionBadgeColor = (emotion?: string) => {
+     switch (emotion?.toLowerCase()) {
+       case 'happy':
+       case 'confident':
+         return 'bg-accent/20 text-accent';
+       case 'nervous':
+       case 'stressed':
+         return 'bg-destructive/20 text-destructive';
+       default:
+         return 'bg-muted text-muted-foreground';
+     }
+   };
+ 
+   if (showSummary) {
+     return (
+       <HRInterviewSummary
+         results={results}
+         totalDuration={totalDuration}
+         onRestart={restartInterview}
+         onGoHome={() => navigate('/')}
+       />
+     );
+   }
+ 
+   if (isLoading) {
+     return (
+       <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+         <div className="text-center">
+           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+           <p className="text-muted-foreground">Loading HR Interview Questions...</p>
+         </div>
+       </div>
+     );
+   }
+ 
+   const currentQuestion = questions[currentQuestionIndex];
+   const progressPercent = ((currentQuestionIndex + 1) / questions.length) * 100;
+ 
+   return (
+     <div className="min-h-screen bg-gradient-hero p-4">
+       <div className="container mx-auto max-w-7xl">
+         {/* Header */}
+         <div className="flex items-center justify-between mb-6">
+           <Button 
+             variant="ghost" 
+             size="sm" 
+             onClick={() => navigate("/")} 
+             className="text-muted-foreground hover:text-foreground"
+           >
+             <ArrowLeft className="w-4 h-4 mr-2" /> Back
+           </Button>
+ 
+           {interviewStarted && (
+             <div className="flex items-center gap-4">
+               <Badge variant="outline" className="text-sm">
+                 Total: {formatTime(totalDuration)}
+               </Badge>
+               <div className="flex items-center gap-2">
+                 <span className="text-sm text-muted-foreground">
+                   Question {currentQuestionIndex + 1}/{questions.length}
+                 </span>
+                 <Progress value={progressPercent} className="w-24 h-2" />
+               </div>
+             </div>
+           )}
+         </div>
+ 
+         {!interviewStarted ? (
+           /* Pre-Interview Setup */
+           <div className="max-w-3xl mx-auto">
+             <Card className="p-8 bg-gradient-card border-border text-center">
+               <h1 className="text-3xl font-bold mb-4">HR/Behavioral Interview</h1>
+               <p className="text-muted-foreground mb-6">
+                 Practice answering behavioral questions with real-time AI feedback.
+                 Use the STAR method: <span className="text-primary">Situation → Task → Action → Result</span>
+               </p>
+ 
+               <div className="mb-8">
+                 <div className="relative aspect-video bg-background rounded-lg overflow-hidden max-w-xl mx-auto">
+                   <video 
+                     ref={videoRef} 
+                     autoPlay 
+                     playsInline 
+                     muted 
+                     className="w-full h-full object-cover"
+                   />
+                   {!isCameraOn && (
+                     <div className="absolute inset-0 flex items-center justify-center bg-secondary/90">
+                       <div className="text-center">
+                         <Camera className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                         <p className="text-muted-foreground">Camera preview will appear here</p>
+                       </div>
+                     </div>
+                   )}
+                 </div>
+               </div>
+ 
+               <div className="flex justify-center gap-4 mb-6">
+                 <Button
+                   onClick={isCameraOn ? stopCamera : startCamera}
+                   variant={isCameraOn ? "destructive" : "default"}
+                   className="gap-2"
+                 >
+                   {isCameraOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                   {isCameraOn ? "Stop Camera" : "Enable Camera"}
+                 </Button>
+               </div>
+ 
+               <div className="bg-secondary/30 rounded-lg p-4 mb-6">
+                 <h3 className="font-medium mb-2">Interview Format</h3>
+                 <ul className="text-sm text-muted-foreground space-y-1 text-left max-w-md mx-auto">
+                   <li>• 5 behavioral questions from different categories</li>
+                   <li>• AI analyzes your video for emotions, posture & gestures</li>
+                   <li>• Real-time speech transcription</li>
+                   <li>• STAR method evaluation after each answer</li>
+                   <li>• Detailed summary at the end</li>
+                 </ul>
+               </div>
+ 
+               <Button
+                 onClick={startInterview}
+                 size="lg"
+                 disabled={!isCameraOn || !modelsLoaded}
+                 className="gap-2"
+               >
+                 {!modelsLoaded ? (
+                   <>
+                     <Loader2 className="w-4 h-4 animate-spin" />
+                     Loading AI Models...
+                   </>
+                 ) : (
+                   <>
+                     <Play className="w-4 h-4" />
+                     Start Interview
+                   </>
+                 )}
+               </Button>
+             </Card>
+           </div>
+         ) : (
+           /* Interview in Progress */
+           <div className="grid lg:grid-cols-3 gap-6">
+             {/* Video & Question Area */}
+             <div className="lg:col-span-2 space-y-4">
+               {/* Question Card */}
+               <Card className="p-6 bg-gradient-card border-border">
+                 <div className="flex items-start justify-between mb-4">
+                   <div>
+                     <Badge className="mb-2 bg-primary/20 text-primary">
+                       {currentQuestion?.category}
+                     </Badge>
+                     <h2 className="text-xl font-semibold">{currentQuestion?.improved_question}</h2>
+                   </div>
+                   <Badge variant="outline">{currentQuestion?.difficulty}</Badge>
+                 </div>
+               </Card>
+ 
+               {/* Video Feed */}
+               <Card className="p-4 bg-gradient-card border-border">
+                 <div className="relative aspect-video bg-background rounded-lg overflow-hidden">
+                   <video 
+                     ref={videoRef} 
+                     autoPlay 
+                     playsInline 
+                     muted 
+                     className="w-full h-full object-cover"
+                   />
+                   <canvas 
+                     ref={overlayCanvasRef} 
+                     className="absolute inset-0 w-full h-full pointer-events-none"
+                   />
+ 
+                   {/* Recording indicator */}
+                   {isRecording && (
+                     <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive/90 px-3 py-1 rounded-full">
+                       <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                       <span className="text-sm text-white font-medium">{formatTime(recordingTime)}</span>
+                     </div>
+                   )}
+ 
+                   {/* AI Vision Badges */}
+                   {aiVisionMetrics && isRecording && (
+                     <div className="absolute top-4 right-4 flex flex-col gap-2">
+                       {aiVisionMetrics.detectedEmotion && (
+                         <Badge className={getEmotionBadgeColor(aiVisionMetrics.detectedEmotion)}>
+                           😊 {aiVisionMetrics.detectedEmotion}
+                         </Badge>
+                       )}
+                       {aiVisionMetrics.postureType && (
+                         <Badge variant="outline" className="bg-background/80">
+                           🧍 {aiVisionMetrics.postureType}
+                         </Badge>
+                       )}
+                       {aiVisionMetrics.gestureType && (
+                         <Badge variant="outline" className="bg-background/80">
+                           👋 {aiVisionMetrics.gestureType}
+                         </Badge>
+                       )}
+                     </div>
+                   )}
+                 </div>
+ 
+                 {/* Controls */}
+                 <div className="flex items-center justify-center gap-4 mt-4">
+                   <Button
+                     onClick={toggleMicrophone}
+                     variant="outline"
+                     size="icon"
+                     className="rounded-full"
+                   >
+                     {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                   </Button>
+ 
+                   {!isRecording ? (
+                     <Button
+                       onClick={startRecording}
+                       size="lg"
+                       className="gap-2 px-8"
+                       disabled={isEvaluating}
+                     >
+                       <Play className="w-4 h-4" />
+                       Start Answering
+                     </Button>
+                   ) : (
+                     <Button
+                       onClick={stopRecording}
+                       variant="destructive"
+                       size="lg"
+                       className="gap-2 px-8"
+                     >
+                       <Square className="w-4 h-4" />
+                       Stop & Submit
+                     </Button>
+                   )}
+ 
+                   <Button
+                     onClick={skipQuestion}
+                     variant="ghost"
+                     size="icon"
+                     className="rounded-full"
+                     disabled={isRecording || isEvaluating}
+                   >
+                     <SkipForward className="w-4 h-4" />
+                   </Button>
+                 </div>
+               </Card>
+ 
+               {/* Transcript */}
+               <Card className="p-4 bg-gradient-card border-border">
+                 <h3 className="text-sm font-medium mb-2 text-muted-foreground">Your Answer</h3>
+                 <div className="min-h-[80px] p-3 bg-secondary/30 rounded-lg text-sm">
+                   {transcript || interimTranscript ? (
+                     <>
+                       <span>{transcript}</span>
+                       <span className="text-muted-foreground italic">{interimTranscript}</span>
+                     </>
+                   ) : (
+                     <span className="text-muted-foreground">
+                       {isRecording ? "Start speaking..." : "Click 'Start Answering' to begin"}
+                     </span>
+                   )}
+                 </div>
+               </Card>
+ 
+               {/* Feedback Card */}
+               {(currentFeedback || isEvaluating) && (
+                 <Card className="p-4 bg-gradient-card border-border">
+                   {isEvaluating ? (
+                     <div className="flex items-center gap-3">
+                       <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                       <span className="text-muted-foreground">Evaluating your answer with Gemini 3 Flash...</span>
+                     </div>
+                   ) : (
+                     <div>
+                       <div className="flex items-center gap-2 mb-2">
+                         <CheckCircle className="w-5 h-5 text-green-400" />
+                         <h3 className="font-medium">AI Feedback</h3>
+                       </div>
+                       <p className="text-sm text-muted-foreground mb-4">{currentFeedback}</p>
+                       <Button onClick={nextQuestion} className="gap-2">
+                         {currentQuestionIndex < questions.length - 1 ? (
+                           <>
+                             Next Question <ChevronRight className="w-4 h-4" />
+                           </>
+                         ) : (
+                           <>
+                             View Summary <ChevronRight className="w-4 h-4" />
+                           </>
+                         )}
+                       </Button>
+                     </div>
+                   )}
+                 </Card>
+               )}
+             </div>
+ 
+             {/* Metrics Sidebar */}
+             <div className="space-y-4">
+               <Card className="p-4 bg-gradient-card border-border">
+                 <h3 className="text-sm font-medium mb-4">Real-time Metrics</h3>
+                 <div className="space-y-3">
+                   {[
+                     { label: 'Eye Contact', value: currentMetrics?.eyeContact || 0 },
+                     { label: 'Posture', value: currentMetrics?.posture || 0 },
+                     { label: 'Body Language', value: currentMetrics?.bodyLanguage || 0 },
+                     { label: 'Expression', value: currentMetrics?.facialExpression || 0 },
+                     { label: 'Voice Clarity', value: currentMetrics?.speechClarity || 0 },
+                   ].map(metric => (
+                     <div key={metric.label}>
+                       <div className="flex justify-between text-sm mb-1">
+                         <span className="text-muted-foreground">{metric.label}</span>
+                         <span>{metric.value}%</span>
+                       </div>
+                       <Progress value={metric.value} className="h-1.5" />
+                     </div>
+                   ))}
+                 </div>
+               </Card>
+ 
+               <Card className="p-4 bg-gradient-card border-border">
+                 <h3 className="text-sm font-medium mb-3">STAR Tips</h3>
+                 <ul className="space-y-2 text-xs text-muted-foreground">
+                   <li className="flex gap-2">
+                     <span className="text-primary font-bold">S</span>
+                     <span>Set the scene - describe the context</span>
+                   </li>
+                   <li className="flex gap-2">
+                     <span className="text-primary font-bold">T</span>
+                     <span>Explain your specific responsibility</span>
+                   </li>
+                   <li className="flex gap-2">
+                     <span className="text-primary font-bold">A</span>
+                     <span>Detail the steps YOU took</span>
+                   </li>
+                   <li className="flex gap-2">
+                     <span className="text-primary font-bold">R</span>
+                     <span>Share measurable outcomes</span>
+                   </li>
+                 </ul>
+               </Card>
+ 
+               <Card className="p-4 bg-gradient-card border-border">
+                 <h3 className="text-sm font-medium mb-2">Progress</h3>
+                 <div className="space-y-2">
+                   {questions.map((q, i) => (
+                     <div 
+                       key={i} 
+                       className={`flex items-center gap-2 text-xs ${
+                         i === currentQuestionIndex 
+                           ? 'text-primary' 
+                           : i < currentQuestionIndex 
+                             ? 'text-green-400' 
+                             : 'text-muted-foreground'
+                       }`}
+                     >
+                       {i < currentQuestionIndex ? (
+                         <CheckCircle className="w-4 h-4" />
+                       ) : i === currentQuestionIndex ? (
+                         <div className="w-4 h-4 rounded-full border-2 border-primary" />
+                       ) : (
+                         <div className="w-4 h-4 rounded-full border border-muted-foreground" />
+                       )}
+                       <span className="truncate">{q.category}</span>
+                     </div>
+                   ))}
+                 </div>
+               </Card>
+             </div>
+           </div>
+         )}
+       </div>
+     </div>
+   );
+ };
+ 
+ export default HRInterview;
