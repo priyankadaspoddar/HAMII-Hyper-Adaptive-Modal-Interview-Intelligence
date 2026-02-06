@@ -243,176 +243,182 @@
      }, 1000);
    };
  
-   // AI Vision Analysis using Gemini 2.5 Pro
-   const runAiVisionAnalysis = async () => {
-     if (!videoRef.current || !isRecording) return;
+    // Use ref to track recording state for animation frame closure
+    const isRecordingRef = useRef(false);
+
+    const startRecording = useCallback(() => {
+      if (!isCameraOn || !stream) return;
+
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      setRecordingTime(0);
+      setTranscript("");
+      setInterimTranscript("");
+      setCurrentFeedback(null);
+      metricsHistoryRef.current = [];
+      emotionHistoryRef.current = [];
+      speechAnalyzerRef.current.reset();
+      fusionAlgorithmRef.current.reset();
+      setAiVisionMetrics(null);
+      lastAiAnalysisRef.current = 0;
+
+      // Initialize audio analyzer with stream
+      audioAnalyzerRef.current = new AudioAnalyzer();
+      audioAnalyzerRef.current.initialize(stream);
+
+      // Start speech recognition
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.start();
+      }
+
+      // Recording timer
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
+      // Start AI vision analysis with Gemini 2.5 Pro (every 3 seconds)
+      const runAnalysis = async () => {
+        if (!videoRef.current || !isRecordingRef.current) return;
+
+        const video = videoRef.current;
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          ctx.drawImage(video, 0, 0);
+          const imageData = canvas.toDataURL('image/jpeg', 0.7);
+
+          const { data, error } = await supabase.functions.invoke('analyze-presentation', {
+            body: { imageData, transcript: transcript + ' ' + interimTranscript }
+          });
+
+          if (!error && data?.vision) {
+            const detectedEmotion = data.vision.detectedEmotion;
+            setAiVisionMetrics({
+              detectedEmotion,
+              gestureType: data.vision.gestureType,
+              postureType: data.vision.postureType,
+            });
+
+            // Track emotion history
+            if (detectedEmotion) {
+              emotionHistoryRef.current.push(detectedEmotion);
+            }
+
+            // Update metrics from AI vision
+            const aiMetrics: FusedMetrics = {
+              eyeContact: data.vision.eyeContact || 50,
+              posture: data.vision.posture || 50,
+              bodyLanguage: data.vision.bodyLanguage || 50,
+              facialExpression: data.vision.expression || 50,
+              voiceQuality: data.voice?.tone || 50,
+              speechClarity: data.voice?.clarity || 50,
+              contentEngagement: data.voice?.engagement || 50,
+              overallScore: data.overall || 50,
+              confidence: 0.8,
+            };
+            setCurrentMetrics(aiMetrics);
+            metricsHistoryRef.current.push(aiMetrics);
+          }
+        } catch (error) {
+          console.error('AI vision analysis failed:', error);
+        }
+      };
+
+      // Run AI analysis every 3 seconds
+      aiAnalysisIntervalRef.current = setInterval(runAnalysis, 3000);
+      setTimeout(runAnalysis, 500); // First analysis after 500ms
+
+      // Start local analysis loop for real-time updates
+      const analyzeFrame = async () => {
+        if (!videoRef.current || !isRecordingRef.current) return;
+
+        const video = videoRef.current;
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+          animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+          return;
+        }
+
+        try {
+          const timestamp = performance.now();
+          const visionMetrics = visionAnalyzerRef.current
+            ? await visionAnalyzerRef.current.analyzeFrame(video, timestamp)
+            : null;
+
+          const audioFeatures = audioAnalyzerRef.current?.getAudioFeatures() || null;
+          const speechMetrics = speechAnalyzerRef.current.getMetrics();
+
+          if (visionMetrics) {
+            const rawMetrics: RawMetrics = {
+              eyeContact: visionMetrics.face.eyeContact,
+              emotion: visionMetrics.face.emotion,
+              emotionConfidence: visionMetrics.face.emotionConfidence,
+              postureScore: visionMetrics.posture.postureScore,
+              shoulderAlignment: visionMetrics.posture.shoulderAlignment,
+              headPosition: visionMetrics.posture.headPosition,
+              gestureVariety: visionMetrics.gestures.gestureVariety,
+              handVisibility: visionMetrics.gestures.handVisibility,
+              pitch: audioFeatures?.pitch || 0,
+              pitchVariation: audioFeatures?.pitchVariation || 0,
+              volume: audioFeatures?.volume || 0,
+              volumeVariation: audioFeatures?.volumeVariation || 0,
+              clarity: audioFeatures?.clarity || 0,
+              energy: audioFeatures?.energy || 0,
+              wordsPerMinute: speechMetrics.wordsPerMinute,
+              fillerCount: speechMetrics.fillerCount,
+              fillerPercentage: speechMetrics.fillerPercentage,
+              clarityScore: speechMetrics.clarityScore,
+              fluencyScore: speechMetrics.fluencyScore,
+              articulationScore: speechMetrics.articulationScore,
+            };
+
+            const fused = fusionAlgorithmRef.current.fuse(rawMetrics);
+            
+            // Blend with AI metrics if available
+            if (metricsHistoryRef.current.length > 0) {
+              const lastAiMetrics = metricsHistoryRef.current[metricsHistoryRef.current.length - 1];
+              fused.eyeContact = Math.round((fused.eyeContact * 0.3) + (lastAiMetrics.eyeContact * 0.7));
+              fused.posture = Math.round((fused.posture * 0.3) + (lastAiMetrics.posture * 0.7));
+              fused.bodyLanguage = Math.round((fused.bodyLanguage * 0.3) + (lastAiMetrics.bodyLanguage * 0.7));
+              fused.facialExpression = Math.round((fused.facialExpression * 0.3) + (lastAiMetrics.facialExpression * 0.7));
+            }
+            
+            setCurrentMetrics(fused);
+          }
+        } catch (error) {
+          console.error("Analysis error:", error);
+        }
+
+        if (isRecordingRef.current) {
+          animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+        }
+      };
+
+      analyzeFrame();
+    }, [isCameraOn, stream, transcript, interimTranscript]);
  
-     const video = videoRef.current;
-     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
- 
-     const now = Date.now();
-     if (now - lastAiAnalysisRef.current < 3000) return;
-     lastAiAnalysisRef.current = now;
- 
-     try {
-       const canvas = document.createElement('canvas');
-       canvas.width = video.videoWidth;
-       canvas.height = video.videoHeight;
-       const ctx = canvas.getContext('2d');
-       if (!ctx) return;
- 
-       ctx.drawImage(video, 0, 0);
-       const imageData = canvas.toDataURL('image/jpeg', 0.7);
- 
-       const { data, error } = await supabase.functions.invoke('analyze-presentation', {
-         body: { imageData, transcript: transcript + ' ' + interimTranscript }
-       });
- 
-       if (error) {
-         console.error('AI vision analysis error:', error);
-         return;
-       }
- 
-       if (data?.vision) {
-         const detectedEmotion = data.vision.detectedEmotion;
-         setAiVisionMetrics({
-           detectedEmotion,
-           gestureType: data.vision.gestureType,
-           postureType: data.vision.postureType,
-         });
- 
-         // Track emotion history
-         if (detectedEmotion) {
-           emotionHistoryRef.current.push(detectedEmotion);
-         }
- 
-         // Blend metrics
-         if (metricsHistoryRef.current.length > 0) {
-           const lastMetrics = metricsHistoryRef.current[metricsHistoryRef.current.length - 1];
-           const blendedMetrics: FusedMetrics = {
-             eyeContact: Math.round((lastMetrics.eyeContact * 0.3) + (data.vision.eyeContact * 0.7)),
-             posture: Math.round((lastMetrics.posture * 0.3) + (data.vision.posture * 0.7)),
-             bodyLanguage: Math.round((lastMetrics.bodyLanguage * 0.3) + (data.vision.bodyLanguage * 0.7)),
-             facialExpression: Math.round((lastMetrics.facialExpression * 0.3) + (data.vision.expression * 0.7)),
-             voiceQuality: data.voice?.tone || lastMetrics.voiceQuality,
-             speechClarity: data.voice?.clarity || lastMetrics.speechClarity,
-             contentEngagement: data.voice?.engagement || lastMetrics.contentEngagement,
-             overallScore: data.overall || lastMetrics.overallScore,
-             confidence: lastMetrics.confidence,
-           };
-           setCurrentMetrics(blendedMetrics);
-           metricsHistoryRef.current.push(blendedMetrics);
-         }
-       }
-     } catch (error) {
-       console.error('AI vision analysis failed:', error);
-     }
-   };
- 
-   const startRecording = () => {
-     if (!isCameraOn || !stream) return;
- 
-     setIsRecording(true);
-     setRecordingTime(0);
-     setTranscript("");
-     setInterimTranscript("");
-     setCurrentFeedback(null);
-     metricsHistoryRef.current = [];
-     emotionHistoryRef.current = [];
-     speechAnalyzerRef.current.reset();
-     fusionAlgorithmRef.current.reset();
-     setAiVisionMetrics(null);
-     lastAiAnalysisRef.current = 0;
- 
-     audioAnalyzerRef.current = new AudioAnalyzer();
-     audioAnalyzerRef.current.initialize(stream);
- 
-     if (speechRecognitionRef.current) {
-       speechRecognitionRef.current.start();
-     }
- 
-     // Recording timer
-     timerIntervalRef.current = setInterval(() => {
-       setRecordingTime(prev => prev + 1);
-     }, 1000);
- 
-     // Start AI analysis interval
-     aiAnalysisIntervalRef.current = setInterval(() => {
-       runAiVisionAnalysis();
-     }, 3000);
-     setTimeout(() => runAiVisionAnalysis(), 1000);
- 
-     // Start local analysis loop
-     const analyzeFrame = async () => {
-       if (!videoRef.current || !isRecording) return;
- 
-       const video = videoRef.current;
-       if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-         animationFrameRef.current = requestAnimationFrame(analyzeFrame);
-         return;
-       }
- 
-       try {
-         const timestamp = performance.now();
-         const visionMetrics = visionAnalyzerRef.current
-           ? await visionAnalyzerRef.current.analyzeFrame(video, timestamp)
-           : null;
- 
-         const audioFeatures = audioAnalyzerRef.current?.getAudioFeatures() || null;
-         const speechMetrics = speechAnalyzerRef.current.getMetrics();
- 
-         if (visionMetrics && audioFeatures) {
-           const rawMetrics: RawMetrics = {
-             eyeContact: visionMetrics.face.eyeContact,
-             emotion: visionMetrics.face.emotion,
-             emotionConfidence: visionMetrics.face.emotionConfidence,
-             postureScore: visionMetrics.posture.postureScore,
-             shoulderAlignment: visionMetrics.posture.shoulderAlignment,
-             headPosition: visionMetrics.posture.headPosition,
-             gestureVariety: visionMetrics.gestures.gestureVariety,
-             handVisibility: visionMetrics.gestures.handVisibility,
-             pitch: audioFeatures.pitch,
-             pitchVariation: audioFeatures.pitchVariation,
-             volume: audioFeatures.volume,
-             volumeVariation: audioFeatures.volumeVariation,
-             clarity: audioFeatures.clarity,
-             energy: audioFeatures.energy,
-             wordsPerMinute: speechMetrics.wordsPerMinute,
-             fillerCount: speechMetrics.fillerCount,
-             fillerPercentage: speechMetrics.fillerPercentage,
-             clarityScore: speechMetrics.clarityScore,
-             fluencyScore: speechMetrics.fluencyScore,
-             articulationScore: speechMetrics.articulationScore,
-           };
- 
-           const fused = fusionAlgorithmRef.current.fuse(rawMetrics);
-           setCurrentMetrics(fused);
-           metricsHistoryRef.current.push(fused);
-         }
-       } catch (error) {
-         console.error("Analysis error:", error);
-       }
- 
-       animationFrameRef.current = requestAnimationFrame(analyzeFrame);
-     };
- 
-     analyzeFrame();
-   };
- 
-   const stopRecording = async () => {
-     setIsRecording(false);
-     if (speechRecognitionRef.current) speechRecognitionRef.current.stop();
-     if (audioAnalyzerRef.current) audioAnalyzerRef.current.cleanup();
-     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-     if (aiAnalysisIntervalRef.current) clearInterval(aiAnalysisIntervalRef.current);
- 
-     // Calculate average metrics
-     const avgMetrics = calculateAverageMetrics();
- 
-     // Evaluate the answer
-     await evaluateAnswer(avgMetrics);
-   };
+    const stopRecording = useCallback(async () => {
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      
+      // Stop all services
+      if (speechRecognitionRef.current) speechRecognitionRef.current.stop();
+      if (audioAnalyzerRef.current) audioAnalyzerRef.current.cleanup();
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (aiAnalysisIntervalRef.current) clearInterval(aiAnalysisIntervalRef.current);
+
+      // Calculate average metrics
+      const avgMetrics = calculateAverageMetrics();
+
+      // Evaluate the answer
+      await evaluateAnswer(avgMetrics);
+    }, []);
  
    const calculateAverageMetrics = () => {
      const history = metricsHistoryRef.current;
