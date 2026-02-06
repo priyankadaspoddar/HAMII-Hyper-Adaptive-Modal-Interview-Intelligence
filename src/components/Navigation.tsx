@@ -23,6 +23,9 @@ const Navigation = () => {
             <a href="#technology" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Technology
             </a>
+            <a href="/hr-interview" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              HR Interview
+            </a>
             <Button 
               size="sm" 
               onClick={() => window.location.href = '/practice'}
