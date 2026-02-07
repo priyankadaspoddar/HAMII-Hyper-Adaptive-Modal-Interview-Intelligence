@@ -264,22 +264,32 @@
      }
    };
  
-   const startInterview = () => {
-     if (!isCameraOn) {
-       toast({ title: "Camera Required", description: "Please enable your camera first", variant: "destructive" });
-       return;
-     }
-     setInterviewStarted(true);
-     setResults([]);
-     setCurrentQuestionIndex(0);
-     setTotalDuration(0);
- 
-     // Start total duration timer
-     totalTimerRef.current = setInterval(() => {
-       setTotalDuration(prev => prev + 1);
-     }, 1000);
-   };
- 
+    const startInterview = () => {
+      if (!isCameraOn || !stream) {
+        toast({ title: "Camera Required", description: "Please enable your camera first", variant: "destructive" });
+        return;
+      }
+      setInterviewStarted(true);
+      setResults([]);
+      setCurrentQuestionIndex(0);
+      setTotalDuration(0);
+
+      // Start total duration timer
+      totalTimerRef.current = setInterval(() => {
+        setTotalDuration(prev => prev + 1);
+      }, 1000);
+    };
+
+    // Re-attach stream to video element when it changes (critical for interview phase)
+    useEffect(() => {
+      if (stream && videoRef.current && videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(err => {
+          console.log("Video play handled:", err);
+        });
+      }
+    }, [stream, interviewStarted]);
+
     // Use ref to track recording state for animation frame closure
     const isRecordingRef = useRef(false);
 
