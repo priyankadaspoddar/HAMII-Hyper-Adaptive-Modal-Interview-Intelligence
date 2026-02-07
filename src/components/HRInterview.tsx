@@ -194,22 +194,59 @@
      };
    }, []);
  
-   const startCamera = async () => {
-     try {
-       const mediaStream = await navigator.mediaDevices.getUserMedia({
-         video: { width: 1280, height: 720 },
-         audio: true,
-       });
-       if (videoRef.current) videoRef.current.srcObject = mediaStream;
-       setStream(mediaStream);
-       setIsCameraOn(true);
-       setIsMicOn(true);
-       toast({ title: "Camera Ready", description: "Ready to start your HR interview" });
-     } catch (error) {
-       console.error("Camera error:", error);
-       toast({ title: "Camera Access Denied", description: "Please allow camera access", variant: "destructive" });
-     }
-   };
+    const startCamera = async () => {
+      try {
+        // CRITICAL: getUserMedia must be called directly in click handler
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 },
+            facingMode: 'user'
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100,
+          },
+        });
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          // Ensure video plays after stream is set
+          try {
+            await videoRef.current.play();
+          } catch (playError) {
+            console.log("Autoplay handled by browser:", playError);
+          }
+        }
+        
+        setStream(mediaStream);
+        setIsCameraOn(true);
+        setIsMicOn(true);
+        toast({ title: "Camera Ready", description: "Ready to start your HR interview" });
+      } catch (error: any) {
+        console.error("Camera error:", error);
+        if (error.name === "NotAllowedError") {
+          toast({ 
+            title: "Camera Access Denied", 
+            description: "Please allow camera and microphone access in your browser settings", 
+            variant: "destructive" 
+          });
+        } else if (error.name === "NotFoundError") {
+          toast({ 
+            title: "Camera Not Found", 
+            description: "No camera detected. Please connect a camera and try again.", 
+            variant: "destructive" 
+          });
+        } else {
+          toast({ 
+            title: "Camera Error", 
+            description: "Could not access camera. Please check permissions.", 
+            variant: "destructive" 
+          });
+        }
+      }
+    };
  
    const stopCamera = () => {
      if (stream) {
