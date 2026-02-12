@@ -16,9 +16,9 @@ const Hero = () => {
           <span className="text-sm text-muted-foreground">AI-Powered Communication Coaching</span>
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-fade-in bg-gradient-primary bg-clip-text text-transparent">
-          Master Your Communication
-          <br />
+        <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-fade-in bg-gradient-primary bg-clip-text text-transparent">Master Your Communication
+with HAMII Intelligence
+        <br />
           with HAMII Intelligence
         </h1>
 
