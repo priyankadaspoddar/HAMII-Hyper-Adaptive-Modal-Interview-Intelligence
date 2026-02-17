@@ -4,7 +4,7 @@ const steps = [
   {
     icon: Video,
     title: "Select Practice Category",
-    description: "Choose from different categories such as Resume-Based Interviews, HR/Behavioral Interviews or presentation formats like job interviews, sales pitches, or academic presentations to focus your practice effectively..",
+    description: "Choose from different categories such as Resume-Based Interviews, HR/Behavioral Interviews or presentation formats like job interviews, sales pitches, or academic presentations to focus your practice.",
   },
   {
     icon: BarChart3,
