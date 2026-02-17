@@ -42,7 +42,6 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Build context for summarization
     const questionsContext = results.map((r, i) => 
       `Q${i + 1} (${r.category}): "${r.question}"
       Answer: "${r.answer.slice(0, 300)}${r.answer.length > 300 ? '...' : ''}"
@@ -130,7 +129,6 @@ ${questionsContext}`
     const aiResult = await response.json();
     const content = aiResult.choices[0].message.content;
     
-    // Parse JSON from response (handle markdown code blocks if present)
     let summary;
     try {
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
@@ -139,7 +137,6 @@ ${questionsContext}`
       summary = JSON.parse(jsonStr.trim());
     } catch (parseError) {
       console.error('JSON parse error:', parseError, 'Content:', content);
-      // Fallback structure
       summary = {
         executiveSummary: "Session completed successfully. Review individual question feedback for detailed insights.",
         performanceRating: metrics.avgOverallScore >= 80 ? "Strong" : metrics.avgOverallScore >= 60 ? "Competent" : "Developing",
