@@ -28,12 +28,12 @@ const Footer = () => {
           </div>
 
           <div>
-            <h4 className="font-semibold mb-4 text-foreground">Resources</h4>
+            <h4 className="font-semibold mb-4 text-foreground">Interviews</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><a href="#" className="hover:text-foreground transition-colors">Documentation</a></li>
-              <li><a href="#" className="hover:text-foreground transition-colors">API Reference</a></li>
-              <li><a href="#" className="hover:text-foreground transition-colors">Support</a></li>
-              <li><a href="#" className="hover:text-foreground transition-colors">Community</a></li>
+              <li><a href="#" className="hover:text-foreground transition-colors">Resume-Based Interviews</a></li>
+              <li><a href="#" className="hover:text-foreground transition-colors">AI-Powered HR Round</a></li>
+              <li><a href="#" className="hover:text-foreground transition-colors">Technical MCQs</a></li>
+              <li><a href="#" className="hover:text-foreground transition-colors"></a></li>
             </ul>
           </div>
 
