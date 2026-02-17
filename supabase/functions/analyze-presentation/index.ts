@@ -3,22 +3,19 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Extract JSON from AI response that may contain markdown code blocks
 function extractJsonFromResponse(response: string): unknown {
   if (!response || typeof response !== 'string') {
     throw new Error('Empty or invalid response');
   }
 
-  // Step 1: Remove markdown code blocks
   let cleaned = response
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/g, '')
     .trim();
 
-  // Step 2: Find JSON boundaries
   const jsonStart = cleaned.indexOf('{');
   const jsonEnd = cleaned.lastIndexOf('}');
 
@@ -28,17 +25,15 @@ function extractJsonFromResponse(response: string): unknown {
 
   cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
 
-  // Step 3: Attempt parse with error handling
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    // Step 4: Try to fix common issues
     cleaned = cleaned
-      .replace(/,\s*}/g, '}') // Remove trailing commas before }
-      .replace(/,\s*]/g, ']') // Remove trailing commas before ]
-      .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
-      .replace(/\n/g, ' ') // Replace newlines with spaces
-      .replace(/\r/g, ''); // Remove carriage returns
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']')
+      .replace(/[\x00-\x1F\x7F]/g, '')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, '');
 
     try {
       return JSON.parse(cleaned);
@@ -62,7 +57,6 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Analyze facial expressions and body language from image
     const visionAnalysis = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -145,7 +139,6 @@ IMPORTANT: Respond with ONLY valid JSON, no markdown, no code blocks, no extra t
       feedback?: string;
     };
 
-    // Analyze voice quality and speech content
     let voiceScores = { clarity: 70, pace: 70, tone: 70, engagement: 70, feedback: 'Not enough speech data yet.' };
     
     if (transcript && transcript.length > 20) {
