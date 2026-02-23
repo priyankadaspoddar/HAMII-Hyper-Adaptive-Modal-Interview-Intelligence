@@ -37,43 +37,52 @@ serve(async (req) => {
       candidateName?: string;
     };
 
-    // ✅ Use the Gemini key you already added in Supabase secrets (LOVABLE_API_KEY)
-    const GEMINI_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY (stored as LOVABLE_API_KEY) is not configured');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const questionsContext = results.map((r, i) =>
+    const questionsContext = results.map((r, i) => 
       `Q${i + 1} (${r.category}): "${r.question}"
-Answer: "${r.answer.slice(0, 300)}${r.answer.length > 300 ? '...' : ''}"
-Scores: Content ${r.contentScore}%, Delivery ${r.deliveryScore}%, Overall ${r.overallScore}%
-Strengths: ${r.strengths.join(', ') || 'None identified'}
-Areas to improve: ${r.improvements.join(', ') || 'None identified'}`
+      Answer: "${r.answer.slice(0, 300)}${r.answer.length > 300 ? '...' : ''}"
+      Scores: Content ${r.contentScore}%, Delivery ${r.deliveryScore}%, Overall ${r.overallScore}%
+      Strengths: ${r.strengths.join(', ') || 'None identified'}
+      Areas to improve: ${r.improvements.join(', ') || 'None identified'}`
     ).join('\n\n');
 
     const metricsContext = `
-Session Delivery Metrics:
-- Eye Contact: ${metrics.avgEyeContact}%
-- Posture: ${metrics.avgPosture}%
-- Speech Clarity: ${metrics.avgSpeechClarity}%
-- Body Language: ${metrics.avgBodyLanguage}%
-- Average Overall Score: ${metrics.avgOverallScore}%
-`;
+    Session Delivery Metrics:
+    - Eye Contact: ${metrics.avgEyeContact}%
+    - Posture: ${metrics.avgPosture}%
+    - Speech Clarity: ${metrics.avgSpeechClarity}%
+    - Body Language: ${metrics.avgBodyLanguage}%
+    - Average Overall Score: ${metrics.avgOverallScore}%
+    `;
 
-    const systemPrompt = `You are an expert interview coach providing a comprehensive session recap. Generate a professional, encouraging, and actionable summary.
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3-flash-preview',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert interview coach providing a comprehensive session recap. Generate a professional, encouraging, and actionable summary.
 
-Your summary must include:
-1. Executive Summary (2-3 sentences)
-2. Top Strengths (exactly 3 bullet points with specific examples)
-3. Priority Improvements (exactly 3 bullet points with actionable steps)
-4. Delivery Analysis (non-verbal communication)
-5. Content Quality (structure, relevance, depth)
-6. Action Plan (exactly 3 specific steps)
+Your summary should include:
+1. **Executive Summary** (2-3 sentences): Overall performance rating and key takeaway
+2. **Top Strengths** (3 bullet points): What the candidate did well, with specific examples
+3. **Priority Improvements** (3 bullet points): Most impactful areas to work on, with specific action items
+4. **Delivery Analysis**: Brief analysis of non-verbal communication (eye contact, posture, body language)
+5. **Content Quality**: Assessment of answer structure, relevance, and depth
+6. **Action Plan**: 3 specific, actionable steps for improvement before the next interview
 
-Be specific and reference actual answers when possible. Use an encouraging but honest tone.
+Be specific and reference actual answers/behaviors when possible. Use an encouraging but honest tone.
 
-You MUST respond with ONLY a valid JSON object in this exact format (no extra text, no markdown):
-
+Respond with valid JSON in this exact format:
 {
   "executiveSummary": "<2-3 sentence overview>",
   "performanceRating": "<Excellent|Strong|Competent|Developing|Needs Work>",
@@ -83,76 +92,60 @@ You MUST respond with ONLY a valid JSON object in this exact format (no extra te
   "contentQuality": "<paragraph assessing answer quality>",
   "actionPlan": ["<action 1>", "<action 2>", "<action 3>"],
   "motivationalNote": "<brief encouraging closing message>"
-}`;
-
-    const userPrompt = `Generate a session recap for ${candidateName || 'the candidate'}:
+}`
+          },
+          {
+            role: 'user',
+            content: `Generate a session recap for ${candidateName || 'the candidate'}:
 
 ${metricsContext}
 
 Interview Questions and Responses:
-${questionsContext}`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: userPrompt }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-            responseMimeType: "application/json"
+${questionsContext}`
           }
-        })
-      }
-    );
+        ]
+      })
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API error:', response.status, errorText);
-
+      console.error('AI Gateway error:', response.status, errorText);
+      
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }), {
           status: 429,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      throw new Error(`Gemini API error: ${response.status}`);
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'Usage limit reached. Please add credits to continue.' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`AI Gateway error: ${response.status}`);
     }
 
     const aiResult = await response.json();
-    const generatedText = aiResult.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
+    const content = aiResult.choices[0].message.content;
+    
     let summary;
     try {
-      // Clean any possible markdown/code block wrappers
-      const jsonMatch = generatedText.match(/```json\s*([\s\S]*?)\s*```/) ||
-                        generatedText.match(/```\s*([\s\S]*?)\s*```/) ||
-                        generatedText.match(/\{[\s\S]*\}/);
-      
-      const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : generatedText;
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        content.match(/```\s*([\s\S]*?)\s*```/);
+      const jsonStr = jsonMatch ? jsonMatch[1] : content;
       summary = JSON.parse(jsonStr.trim());
     } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      // Fallback
+      console.error('JSON parse error:', parseError, 'Content:', content);
       summary = {
-        executiveSummary: "Session completed successfully. Review the detailed feedback for each question.",
+        executiveSummary: "Session completed successfully. Review individual question feedback for detailed insights.",
         performanceRating: metrics.avgOverallScore >= 80 ? "Strong" : metrics.avgOverallScore >= 60 ? "Competent" : "Developing",
         topStrengths: results.flatMap(r => r.strengths).slice(0, 3),
         priorityImprovements: results.flatMap(r => r.improvements).slice(0, 3),
-        deliveryAnalysis: `Eye contact: ${metrics.avgEyeContact}%, Posture: ${metrics.avgPosture}%.`,
-        contentQuality: `Average score across ${results.length} questions: ${metrics.avgOverallScore}%.`,
-        actionPlan: ["Practice STAR method daily", "Record and review your answers", "Focus on specific examples"],
-        motivationalNote: "You're making great progress — keep practicing!"
+        deliveryAnalysis: `Your delivery metrics show ${metrics.avgEyeContact}% eye contact and ${metrics.avgPosture}% posture score.`,
+        contentQuality: `Your answers scored an average of ${metrics.avgOverallScore}% across ${results.length} questions.`,
+        actionPlan: ["Practice with the STAR method", "Record yourself answering questions", "Research common industry questions"],
+        motivationalNote: "Keep practicing! Every interview is a learning opportunity."
       };
     }
 
