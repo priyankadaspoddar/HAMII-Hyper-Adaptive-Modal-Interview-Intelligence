@@ -84,6 +84,32 @@ interface QuestionResult {
   emotionHistory: string[];
 }
 
+const extractFunctionErrorMessage = async (error: unknown): Promise<string> => {
+  const fallbackMessage = "Could not generate questions";
+
+  if (!(error instanceof Error)) {
+    return fallbackMessage;
+  }
+
+  const errorWithContext = error as Error & { context?: Response };
+  if (errorWithContext.context instanceof Response) {
+    try {
+      const payload = await errorWithContext.context.clone().json();
+      if (typeof payload?.error === "string" && payload.error.length > 0) {
+        return payload.error;
+      }
+    } catch {
+      // If the function response is not JSON, fall back to known error checks.
+    }
+
+    if (errorWithContext.context.status === 402) {
+      return "AI credits exhausted. Please add more credits in Lovable, then retry.";
+    }
+  }
+
+  return error.message || fallbackMessage;
+};
+
 const InterviewPractice = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -272,11 +298,12 @@ const InterviewPractice = () => {
           description: `Found ${confidence?.skillsFound || 0} skills, ${confidence?.projectsFound || 0} projects. Quality: ${confidence?.overallQuality || 'N/A'}` 
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error generating questions:", error);
+      const errorMessage = await extractFunctionErrorMessage(error);
       toast({ 
         title: "Generation Failed", 
-        description: error.message || "Could not generate questions", 
+        description: errorMessage,
         variant: "destructive" 
       });
     } finally {
