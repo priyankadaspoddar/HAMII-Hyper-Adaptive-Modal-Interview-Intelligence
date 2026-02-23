@@ -24,13 +24,26 @@ serve(async (req) => {
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+
+    const aiProvider = LOVABLE_API_KEY ? "lovable" : OPENAI_API_KEY ? "openai" : null;
+    const aiApiKey = LOVABLE_API_KEY || OPENAI_API_KEY;
+
+    if (!aiProvider || !aiApiKey) {
+      console.error("No AI API key configured. Set LOVABLE_API_KEY or OPENAI_API_KEY.");
       return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
+        JSON.stringify({ error: "AI service not configured. Add LOVABLE_API_KEY or OPENAI_API_KEY in Supabase Edge Function secrets." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const aiBaseUrl = aiProvider === "lovable"
+      ? "https://ai.gateway.lovable.dev/v1/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+
+    const aiModel = aiProvider === "lovable"
+      ? (Deno.env.get("LOVABLE_MODEL") || "google/gemini-3-pro-preview")
+      : (Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini");
 
     const systemPrompt = `You are an expert resume parser implementing the NER-KE (Named Entity Recognition & Keyword Extraction) Algorithm.
 
@@ -155,14 +168,14 @@ Before output, verify:
 
 OUTPUT the structured extraction result.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(aiBaseUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${aiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-preview",
+        model: aiModel,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -267,7 +280,7 @@ OUTPUT the structured extraction result.`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      console.error("AI provider error:", { provider: aiProvider, status: response.status, errorText });
       
       if (response.status === 429) {
         return new Response(
@@ -281,9 +294,23 @@ OUTPUT the structured extraction result.`;
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
+
+      if (response.status === 401 || response.status === 403) {
+        return new Response(
+          JSON.stringify({ error: "Invalid AI API key. Check LOVABLE_API_KEY / OPENAI_API_KEY." }),
+          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (errorText.toLowerCase().includes("insufficient_quota")) {
+        return new Response(
+          JSON.stringify({ error: "AI quota exhausted. Top up billing or switch provider key." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ error: "Failed to generate questions" }),
+        JSON.stringify({ error: `Failed to generate questions (${aiProvider} provider error)` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

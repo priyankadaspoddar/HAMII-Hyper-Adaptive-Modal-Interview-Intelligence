@@ -71,3 +71,33 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+
+## Troubleshooting AI "Generation Failed" / Edge Function non-2xx
+
+If question generation suddenly fails after working before, it is often an AI credit/quota issue.
+
+This project now supports **two AI providers** for `generate-interview-questions`:
+
+- `LOVABLE_API_KEY` (Lovable gateway)
+- `OPENAI_API_KEY` (OpenAI direct fallback)
+
+Set these as Supabase Edge Function secrets:
+
+```sh
+supabase secrets set LOVABLE_API_KEY=...
+# optional model override
+supabase secrets set LOVABLE_MODEL=google/gemini-3-pro-preview
+
+# OR use OpenAI as fallback
+supabase secrets set OPENAI_API_KEY=...
+supabase secrets set OPENAI_MODEL=gpt-4o-mini
+```
+
+Then redeploy the function:
+
+```sh
+supabase functions deploy generate-interview-questions
+```
+
+If Lovable credits are exhausted, either top up Lovable credits or configure `OPENAI_API_KEY` as fallback.
