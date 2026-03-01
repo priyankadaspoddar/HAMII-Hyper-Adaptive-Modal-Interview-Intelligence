@@ -1,4 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -51,24 +50,13 @@ serve(async (req) => {
 
   try {
     const { imageData, audioData, transcript } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    if (!GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not configured');
     }
 
-    const visionAnalysis = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert presentation coach and behavioral analyst with advanced multimodal vision capabilities. Analyze the video frame with precision for:
+    const visionSystemPrompt = `You are an expert presentation coach and behavioral analyst with advanced multimodal vision capabilities. Analyze the video frame with precision for:
 
 ## EMOTION DETECTION (Facial Action Coding System - FACS)
 Detect micro-expressions and emotions:
@@ -105,29 +93,47 @@ Assess gaze direction and quality:
 Provide SPECIFIC observations with exact details of what you see. Be critical and honest.
 
 IMPORTANT: Respond with ONLY valid JSON, no markdown, no code blocks, no extra text:
-{"eyeContact": <number 25-100>, "posture": <number 25-100>, "expression": <number 25-100>, "bodyLanguage": <number 25-100>, "detectedEmotion": "<primary emotion>", "gestureType": "<gesture type>", "postureType": "<posture type>", "feedback": "<specific observations>"}`
-          },
+{"eyeContact": <number 25-100>, "posture": <number 25-100>, "expression": <number 25-100>, "bodyLanguage": <number 25-100>, "detectedEmotion": "<primary emotion>", "gestureType": "<gesture type>", "postureType": "<posture type>", "feedback": "<specific observations>"}`;
+
+    // Extract base64 data from data URL
+    const base64Match = imageData?.match(/^data:image\/\w+;base64,(.+)$/);
+    const base64Data = base64Match ? base64Match[1] : imageData;
+    const mimeType = imageData?.match(/^data:(image\/\w+);base64/)?.[1] || 'image/jpeg';
+
+    const visionUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const visionResponse = await fetch(visionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
           {
-            role: 'user',
-            content: [
+            parts: [
+              { text: visionSystemPrompt + '\n\nAnalyze this presentation frame for eye contact, posture, facial expression, and body language. Be specific about what you observe. Return ONLY valid JSON.' },
               {
-                type: 'text',
-                text: 'Analyze this presentation frame for eye contact, posture, facial expression, and body language. Be specific about what you observe. Return ONLY valid JSON.'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageData
+                inlineData: {
+                  mimeType: mimeType,
+                  data: base64Data
                 }
               }
             ]
           }
-        ]
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1024,
+        }
       })
     });
 
-    const visionResult = await visionAnalysis.json();
-    const rawVisionContent = visionResult.choices?.[0]?.message?.content || '{}';
+    if (!visionResponse.ok) {
+      const errText = await visionResponse.text();
+      console.error('Gemini vision API error:', visionResponse.status, errText);
+      throw new Error(`Gemini vision API failed: ${visionResponse.status}`);
+    }
+
+    const visionResult = await visionResponse.json();
+    const rawVisionContent = visionResult.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const visionScores = extractJsonFromResponse(rawVisionContent) as {
       eyeContact: number;
       posture: number;
@@ -142,18 +148,7 @@ IMPORTANT: Respond with ONLY valid JSON, no markdown, no code blocks, no extra t
     let voiceScores = { clarity: 70, pace: 70, tone: 70, engagement: 70, feedback: 'Not enough speech data yet.' };
     
     if (transcript && transcript.length > 20) {
-      const voiceAnalysis = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-pro',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert speech therapist and presentation coach analyzing speech content and delivery.
+      const voicePrompt = `You are an expert speech therapist and presentation coach analyzing speech content and delivery.
 
 Analyze the transcript and provide scores (25-100) for:
 - Clarity: Is the speech clear and articulate? (25-100)
@@ -162,20 +157,30 @@ Analyze the transcript and provide scores (25-100) for:
 - Engagement: Is the content well-structured? Check for filler words. (25-100)
 
 IMPORTANT: Respond with ONLY valid JSON, no markdown, no code blocks:
-{"clarity": <number>, "pace": <number>, "tone": <number>, "engagement": <number>, "feedback": "<specific feedback>"}`
-            },
-            {
-              role: 'user',
-              content: `Analyze this presentation transcript and provide specific feedback. Return ONLY valid JSON: "${transcript}"`
-            }
-          ]
+{"clarity": <number>, "pace": <number>, "tone": <number>, "engagement": <number>, "feedback": "<specific feedback>"}
+
+Analyze this presentation transcript and provide specific feedback: "${transcript}"`;
+
+      const voiceUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+      const voiceResponse = await fetch(voiceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: voicePrompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 512,
+          }
         })
       });
 
-      const voiceResult = await voiceAnalysis.json();
-      const rawVoiceContent = voiceResult.choices?.[0]?.message?.content || '{}';
-      voiceScores = extractJsonFromResponse(rawVoiceContent) as typeof voiceScores;
-      console.log('Voice analysis completed:', voiceScores);
+      if (voiceResponse.ok) {
+        const voiceResult = await voiceResponse.json();
+        const rawVoiceContent = voiceResult.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        voiceScores = extractJsonFromResponse(rawVoiceContent) as typeof voiceScores;
+        console.log('Voice analysis completed:', voiceScores);
+      }
     }
 
     return new Response(

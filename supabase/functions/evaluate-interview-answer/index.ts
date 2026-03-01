@@ -1,4 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -21,10 +20,10 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
+        JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -41,18 +40,7 @@ Delivery Metrics Observed:
 - Overall Confidence: ${fusionMetrics.confidence || 0}%
 ` : '';
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert interview coach and HR professional. Evaluate the candidate's answer considering both content quality and delivery metrics.
+    const systemPrompt = `You are an expert interview coach and HR professional. Evaluate the candidate's answer considering both content quality and delivery metrics.
 
 ## EVALUATION CRITERIA
 
@@ -69,11 +57,22 @@ Delivery Metrics Observed:
 - Clear, well-paced speech
 - Professional presence
 
-Be ENCOURAGING but HONEST. Focus on specific improvements.`
-          },
-          {
-            role: "user",
-            content: `Evaluate this interview response:
+Be ENCOURAGING but HONEST. Focus on specific improvements.
+
+IMPORTANT: Return ONLY valid JSON with this exact structure:
+{
+  "contentScore": <number 0-100>,
+  "deliveryScore": <number 0-100>,
+  "overallScore": <number 0-100>,
+  "strengths": ["strength1", "strength2"],
+  "improvements": ["improvement1"],
+  "sampleAnswer": "<sample better answer>",
+  "overallFeedback": "<2-3 encouraging sentences>",
+  "deliveryFeedback": "<specific delivery feedback>",
+  "quickTip": "<5-7 word tip>"
+}`;
+
+    const userPrompt = `Evaluate this interview response:
 
 **Category:** ${category}
 **Skill Assessed:** ${skillAssessed}
@@ -83,52 +82,38 @@ Be ENCOURAGING but HONEST. Focus on specific improvements.`
 
 ${deliveryContext}
 
-Provide encouraging, specific feedback.`
-          }
-        ],
-        tools: [
+Provide encouraging, specific feedback. Return ONLY valid JSON.`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
           {
-            type: "function",
-            function: {
-              name: "evaluate_answer",
-              description: "Evaluate the interview answer with structured feedback",
-              parameters: {
-                type: "object",
-                properties: {
-                  contentScore: { type: "number", description: "Content quality score (0-100)" },
-                  deliveryScore: { type: "number", description: "Delivery score based on metrics (0-100)" },
-                  overallScore: { type: "number", description: "Combined overall score (0-100)" },
-                  strengths: { type: "array", items: { type: "string" }, description: "2-3 specific strengths" },
-                  improvements: { type: "array", items: { type: "string" }, description: "1-2 specific areas for improvement" },
-                  sampleAnswer: { type: "string", description: "A sample better answer or key points" },
-                  overallFeedback: { type: "string", description: "2-3 encouraging sentences with actionable tip" },
-                  deliveryFeedback: { type: "string", description: "Specific feedback on delivery metrics" },
-                  quickTip: { type: "string", description: "One specific 5-7 word improvement suggestion" }
-                },
-                required: ["contentScore", "deliveryScore", "overallScore", "strengths", "improvements", "overallFeedback"],
-                additionalProperties: false
-              }
-            }
+            parts: [
+              { text: systemPrompt + "\n\n" + userPrompt }
+            ]
           }
         ],
-        tool_choice: { type: "function", function: { name: "evaluate_answer" } }
-      }),
+        generationConfig: {
+          temperature: 0.3,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+          responseMimeType: "application/json"
+        }
+      })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add more credits." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
@@ -139,21 +124,39 @@ Provide encouraging, specific feedback.`
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    
-    if (toolCall?.function?.arguments) {
-      const result = JSON.parse(toolCall.function.arguments);
-      console.log("Evaluation:", { question: question.slice(0, 50), score: result.overallScore });
-      
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
       return new Response(
-        JSON.stringify(result),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Empty response from Gemini" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (e) {
+      // Try to extract JSON from response
+      const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      const jsonStart = cleaned.indexOf('{');
+      const jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        result = JSON.parse(cleaned.substring(jsonStart, jsonEnd + 1));
+      } else {
+        console.error("Could not parse JSON from Gemini:", text.substring(0, 300));
+        return new Response(
+          JSON.stringify({ error: "Invalid JSON response from AI" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    console.log("Evaluation:", { question: question.slice(0, 50), score: result.overallScore });
+    
     return new Response(
-      JSON.stringify({ error: "Failed to parse evaluation response" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify(result),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
