@@ -21,10 +21,10 @@ serve(async (req) => {
       );
     }
 
-    const GEMINI_API_KEY = Deno.env.get("ABARA");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "ABARA environment variable is not set" }),
+        JSON.stringify({ error: "GEMINI_API_KEY environment variable is not set" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
