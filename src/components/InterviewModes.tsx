@@ -39,7 +39,7 @@ const InterviewModes = () => {
                 </li>
                 <li className="flex items-start gap-3">
                   <Sparkles className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span className="text-muted-foreground">Real-time vision analysis with Gemini 2.5 Pro</span>
+                  <span className="text-muted-foreground">Real-time vision analysis with  Groq Llama-3 AI</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <MessageSquare className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
