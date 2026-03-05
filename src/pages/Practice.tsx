@@ -536,16 +536,38 @@ const Practice = () => {
           {/* Real-Time Analytics */}
           <div className="space-y-4">
             <Card className="p-6 bg-gradient-card border-border">
-              <h3 className="text-lg font-bold mb-4 text-foreground">Real-Time AI Analysis</h3>
-
-              {!isRecording ? (
-                <div className="text-center py-8">
-                  <Loader2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {modelsLoaded ? "Start recording to see live AI analysis" : "Loading AI models..."}
-                  </p>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-foreground">Real-Time AI Analysis</h3>
+                <div className="flex items-center gap-2">
+                  {!modelsLoaded && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      <span className="text-xs text-primary font-medium">Loading AI Models</span>
+                    </div>
+                  )}
+                  {modelsLoaded && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/30">
+                      <div className="w-2 h-2 rounded-full bg-accent" />
+                      <span className="text-xs text-accent font-medium">AI Ready</span>
+                    </div>
+                  )}
                 </div>
-              ) : (
+              </div>
+
+              {!modelsLoaded && (
+                <div className="text-center py-8">
+                  <Loader2 className="w-12 h-12 mx-auto mb-3 text-primary animate-spin" />
+                  <p className="text-sm font-medium text-foreground mb-1">Initializing AI Models</p>
+                  <p className="text-xs text-muted-foreground">Loading MediaPipe Face Mesh, Pose Detection, and Audio Analysis...</p>
+                </div>
+              )}
+
+              {modelsLoaded && !isRecording && (
+                <div className="text-center py-8">
+                  <Camera className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Start recording to see live AI analysis</p>
+                </div>
+              )}
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between mb-2">
