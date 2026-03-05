@@ -25,7 +25,7 @@ const steps = [
 
 const HowItWorks = () => {
   return (
-    <section className="py-24 px-4 bg-gradient-hero relative overflow-hidden">
+    <section id="how-it-works" className="py-24 px-4 bg-gradient-hero relative overflow-hidden">
       <div className="absolute inset-0 opacity-30">
         <div className="absolute top-0 left-1/3 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
       </div>
