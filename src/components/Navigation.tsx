@@ -21,11 +21,11 @@ const Navigation = () => {
             <a href="#technology" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Technology
             </a>
-            <a href="/hr-interview" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              HR Interview
+            <a href="https://face-wise-test-main-aic6u9mda-sukanyaghosh685-3142s-projects.vercel.app" target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Proctored Exam
             </a>
-            <Button size="sm" onClick={() => window.location.href = '/practice'} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              Get Started
+            <Button size="sm" onClick={() => window.open("https://resumebasedinterview.vercel.app/", "_blank")} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              Resume Interview
             </Button>
           </div>
         </div>

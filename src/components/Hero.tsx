@@ -35,10 +35,10 @@ const Hero = () => {
         }}>
           <Button 
             size="lg" 
-            onClick={() => window.location.href = '/practice'} 
+            onClick={() => window.open("https://resumebasedinterview.vercel.app/", "_blank")} 
             className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-primary text-lg px-8 py-6"
           >
-            Start Practicing Free
+            Resume-Based Interview
             <ArrowRight className="ml-2 w-5 h-5" />
           </Button>
 
@@ -46,11 +46,11 @@ const Hero = () => {
           <Button 
             size="lg" 
             variant="outline" 
-            onClick={() => window.open("https://hrinterview-psi.vercel.app/", "_blank")}
+            onClick={() => window.open("https://face-wise-test-main-aic6u9mda-sukanyaghosh685-3142s-projects.vercel.app", "_blank")}
             className="border-border hover:bg-secondary text-lg px-8 py-6"
           >
             <Users className="mr-2 w-5 h-5" />
-            HR Interview Practice
+            Technical Proctored Exam
           </Button>
           {/* ────────────────────────────────────────────── */}
         </div>

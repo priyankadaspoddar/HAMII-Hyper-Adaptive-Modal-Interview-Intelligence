@@ -86,7 +86,7 @@ const CategorySelection = ({ onSelect }: CategorySelectionProps) => {
         {/* Interview Practice Card - Featured */}
         <Card
           className="p-6 bg-gradient-to-r from-primary/20 to-primary/5 border-primary/50 mb-6 cursor-pointer group hover:border-primary transition-all"
-          onClick={() => navigate("/interview")}
+          onClick={() => window.open("https://resumebasedinterview.vercel.app/", "_blank")}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">

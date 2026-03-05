@@ -22,34 +22,32 @@ const Footer = () => {
               <li><a href="#features" className="hover:text-foreground transition-colors">Features</a></li>
               <li><a href="#how-it-works" className="hover:text-foreground transition-colors">How It Works</a></li>
               <li><a href="#technology" className="hover:text-foreground transition-colors">Technology</a></li>
-              <li><a href="/practice" className="hover:text-foreground transition-colors">Get Started</a></li> {/* updated example if needed */}
+              <li><a href="/practice" className="hover:text-foreground transition-colors">Get Started</a></li>
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold mb-4 text-foreground">Interviews</h4>
+            <h4 className="font-semibold mb-4 text-foreground">Interviews & Exams</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <a 
-                  href="/interview" 
-                  className="hover:text-foreground transition-colors"
-                >
-                  Resume-Based Interviews
-                </a>
-              </li>
-              <li>
-                <a 
-                  href="https://hrinterview-psi.vercel.app/" 
+                  href="https://resumebasedinterview.vercel.app/" 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors"
                 >
-                  AI-Powered HR Round
+                  Resume-Based Interview
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-foreground transition-colors">Technical MCQs</a>
+                <a 
+                  href="https://face-wise-test-main-aic6u9mda-sukanyaghosh685-3142s-projects.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Technical Proctored Exam
+                </a>
               </li>
-              {/* Removed empty <li> */}
             </ul>
           </div>
           <div>
