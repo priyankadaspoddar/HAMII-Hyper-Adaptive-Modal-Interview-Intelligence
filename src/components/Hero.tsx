@@ -46,7 +46,7 @@ const Hero = () => {
           <Button 
             size="lg" 
             variant="outline" 
-            onClick={() => window.open("https://face-wise-test-main-aic6u9mda-sukanyaghosh685-3142s-projects.vercel.app", "_blank")}
+            onClick={() => window.open("https://hamii-technical-proctoredexam.vercel.app/", "_blank")}
             className="border-border hover:bg-secondary text-lg px-8 py-6"
           >
             <Users className="mr-2 w-5 h-5" />
