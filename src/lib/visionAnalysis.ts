@@ -325,10 +325,11 @@ export class VisionAnalyzer {
     const mouthShrugUpper = blendshapeMap['mouthShrugUpper'] || 0;
    
     const sadScore = (
-      (frownLeft + frownRight) * 0.4 +
-      browInnerUp * 0.4 +
-      mouthShrugUpper * 0.2
-    ) * 100;
+      (frownLeft + frownRight) * 0.35 +
+      browInnerUp * 0.3 +
+      mouthShrugUpper * 0.15 +
+      (1 - (smileLeft + smileRight) / 2) * 0.2
+    ) * 120;
     // SURPRISED: Wide eyes + jaw open + brow raise
     const eyeWideLeft = blendshapeMap['eyeWideLeft'] || 0;
     const eyeWideRight = blendshapeMap['eyeWideRight'] || 0;
@@ -485,7 +486,7 @@ export class VisionAnalyzer {
    
     const emotions = {
       happy: Math.max(0, cheekRaise * 3 + smileLift * 5 + smileWidth * 2),
-      sad: Math.max(0, browRaise * 2 + lipDepress * 4 + (20 - eyesOpen) * 0.5),
+      sad: Math.max(0, browRaise * 2 + lipDepress * 5 + (20 - eyesOpen) * 0.8),
       surprised: Math.max(0, browRaise * 3 + mouthOpen * 4 + eyesOpen * 1.5),
       angry: Math.max(0, browLower * 5 + (20 - eyesOpen) * 1),
       fear: Math.max(0, browRaise * 2 + eyesOpen * 2 + mouthOpen * 1),
