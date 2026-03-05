@@ -568,6 +568,8 @@ const Practice = () => {
                   <p className="text-sm text-muted-foreground">Start recording to see live AI analysis</p>
                 </div>
               )}
+
+              {isRecording && (
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between mb-2">
@@ -615,7 +617,7 @@ const Practice = () => {
                       <span className="text-sm font-bold text-primary">{audioLevel}%</span>
                     </div>
                     <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                      <div className="h-full bg-green-500 transition-all duration-100" style={{ width: `${audioLevel}%` }} />
+                      <div className="h-full bg-accent transition-all duration-100" style={{ width: `${audioLevel}%` }} />
                     </div>
                   </div>
 
