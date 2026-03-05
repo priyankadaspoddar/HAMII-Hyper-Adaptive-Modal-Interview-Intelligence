@@ -1,0 +1,16 @@
+project_id = "smccrpfarvypwukzpjzy"
+
+[functions.analyze-presentation]
+verify_jwt = false
+
+[functions.generate-interview-questions]
+verify_jwt = false
+
+[functions.evaluate-interview-answer]
+verify_jwt = false
+
+[functions.summarize-interview-session]
+verify_jwt = false
+ 
+ [functions.evaluate-hr-answer]
+ verify_jwt = false
