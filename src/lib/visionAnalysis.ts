@@ -617,19 +617,15 @@ export class VisionAnalyzer {
    
     // Check landmark visibility (pose landmarks have visibility property)
     const shoulderVisibility = Math.min(
-      leftShoulder.visibility || 0.5,
+      leftShoulder.visibility || 0.5, 
       rightShoulder.visibility || 0.5
     );
     const hipVisibility = Math.min(
-      leftHip.visibility || 0,
+      leftHip.visibility || 0, 
       rightHip.visibility || 0
     );
-    const noseVisibility = nose.visibility || 0.5;
-
     const hipsVisible = hipVisibility > 0.3;
-    const shouldersReliable = shoulderVisibility > 0.45;
-    const headReliable = noseVisibility > 0.35;
-
+    
     // 1. Shoulder alignment (horizontal level check)
     const shoulderAngle = Math.abs(
       Math.atan2(
@@ -637,25 +633,20 @@ export class VisionAnalyzer {
         rightShoulder.x - leftShoulder.x
       ) * (180 / Math.PI)
     );
-
-    // Seated webcam setups often include slight camera tilt; use a wider dead-zone
-    const shoulderAlignment = shouldersReliable
-      ? Math.max(0, Math.min(100, 100 - Math.max(0, shoulderAngle - 8) * 2.8))
-      : 70;
-
+    // Shoulders are rarely perfectly level; allow ~5° before penalizing
+    const shoulderAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, shoulderAngle - 5) * 4));
+   
     // 2. Head position (should be centered over shoulders)
     const shoulderMid = {
       x: (leftShoulder.x + rightShoulder.x) / 2,
       y: (leftShoulder.y + rightShoulder.y) / 2,
       z: ((leftShoulder.z || 0) + (rightShoulder.z || 0)) / 2,
     };
-
-    // Allow normal seated shifts without over-penalizing
+   
+    // Softer head offset penalty — allow natural slight offset
     const headOffset = Math.abs(nose.x - shoulderMid.x);
-    const headPosition = headReliable
-      ? Math.max(0, Math.min(100, 100 - Math.max(0, headOffset - 0.045) * 95))
-      : 70;
-
+    const headPosition = Math.max(0, Math.min(100, 100 - Math.max(0, headOffset - 0.03) * 120));
+   
     // 3. Spine alignment — only use if hips are actually visible
     let spineAlignment = 80; // Default good score when hips not visible
     if (hipsVisible) {
@@ -665,35 +656,29 @@ export class VisionAnalyzer {
         z: ((leftHip.z || 0) + (rightHip.z || 0)) / 2,
       };
       const spineDeviation = Math.abs(shoulderMid.x - hipMid.x);
-      spineAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, spineDeviation - 0.025) * 130));
+      spineAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, spineDeviation - 0.02) * 150));
     }
-
+   
     // 4. Shoulder-to-nose vertical ratio (upright indicator)
-    // Calibrated for seated posture where nose-to-shoulder gap is naturally smaller.
+    // If nose is well above shoulders, person is upright
     const verticalGap = shoulderMid.y - nose.y; // Positive = nose above shoulders (good)
     const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
-    const uprightRatio = shoulderWidth > 0.08 ? verticalGap / shoulderWidth : 0.28;
-
-    // Upright seated range ~0.18-0.45 with ideal around 0.28
-    const uprightIdeal = 0.28;
-    const uprightTolerance = 0.22;
-    const headUpright = Math.max(
-      0,
-      Math.min(100, 100 - (Math.abs(uprightRatio - uprightIdeal) / uprightTolerance) * 100)
-    );
-
+    const uprightRatio = shoulderWidth > 0 ? verticalGap / shoulderWidth : 0.5;
+    // Good upright ratio is ~0.3-0.7; normalize
+    const headUpright = Math.max(0, Math.min(100, uprightRatio * 150));
+   
     // Overall posture score — adjust weights based on hip visibility
     const postureScore = hipsVisible
       ? Math.round(
-          shoulderAlignment * 0.23 +
-          headPosition * 0.22 +
+          shoulderAlignment * 0.25 +
+          headPosition * 0.25 +
           spineAlignment * 0.25 +
-          headUpright * 0.30
+          headUpright * 0.25
         )
       : Math.round(
-          shoulderAlignment * 0.30 +
+          shoulderAlignment * 0.35 +
           headPosition * 0.30 +
-          headUpright * 0.40
+          headUpright * 0.35
         );
    
     // 5. Stability (frame-to-frame movement)
