@@ -11,7 +11,6 @@ const technologies = [
       "Tailwind CSS",
       "Shadcn/ui",
       "TypeScript"
-      
     ],
     color: "text-purple-400",
   },
@@ -71,26 +70,24 @@ const technologies = [
     color: "text-blue-400",
   },
   {
-  category: "Algorithms & Data Processing (Technical Proctored Exam)",
-  icon: Brain,
-  items: [
+    category: "Algorithms & Data Processing (Technical Proctored Exam)",
+    icon: Brain,
+    items: [
     "Fisher-Yates Shuffle Algorithm",
     "Stratified Sampling",
     "Weighted Penalty Scoring",
     "Group-By Topic Analysis",
-    "Lookup Table Recommendation Engine",
-    "Bayesian Multi-Signal Proctoring Algorithm"
-  ],
-  color: "text-pink-400",
-}
+    "Lookup Table Recommendation Engine"
+    ],
+    color: "text-pink-400",
+  },
   {
-    category: "Algorithms & Data Processing(Multi-Modal Communication Coach)",
+    category: "Algorithms & Data Processing (Multi-Modal Communication Coach)",
     icon: Brain,
     items: [
       "Bayesian Algorithm",
       "Fusion Engine",
-      "Bayesian Scoring & Exponential Moving Average",
-      
+      "Bayesian Scoring + Exponential Moving Average"
     ],
     color: "text-pink-400",
   },
