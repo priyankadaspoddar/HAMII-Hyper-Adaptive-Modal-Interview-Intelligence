@@ -1,30 +1,76 @@
-import { Code2, Cpu, Database, Shield } from "lucide-react";
+import { Code2, Cpu, Database, Shield, Globe, Brain } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 const technologies = [
   {
     category: "Frontend and Backend",
     icon: Code2,
-    items: ["React", "Vite", "TypeScript","Firebase","Serverless Edge REST APIs","Groq Llama-3 AI","Gemini AI"],
+    items: [
+      "React",
+      "Vite",
+      "TypeScript",
+      "Firebase",
+      "Serverless Edge REST APIs",
+      "Groq Llama-3 AI",
+      "Gemini AI"
+    ],
     color: "text-purple-400",
   },
   {
     category: "Computer Vision and AI Models",
     icon: Cpu,
-    items: ["MediaPipe Face/Pose/Iris","Groq Llama-3 70B Model", "FACS"],
+    items: [
+      "MediaPipe Face/Pose/Iris",
+      "Groq Llama-3 70B Model",
+      "FACS (Facial Action Coding System)",
+      "BlazeFace Neural Network"
+    ],
     color: "text-cyan-400",
   },
   {
     category: "Audio & Speech",
     icon: Database,
-    items: ["Web Audio API", "Web Speech API", "YIN Pitch Detection"],
+    items: [
+      "Web Audio API",
+      "Web Speech API",
+      "YIN Pitch Detection"
+    ],
     color: "text-green-400",
   },
   {
     category: "NLP Models",
     icon: Shield,
-    items: ["TF-IDF Analysis", "VADER Sentiment", "Cosine Similarity","NER-KE Proprietary Algorithm"],
+    items: [
+      "TF-IDF Analysis",
+      "VADER Sentiment",
+      "Cosine Similarity",
+      "NER-KE Proprietary Algorithm"
+    ],
     color: "text-orange-400",
+  },
+  {
+    category: "Browser APIs & Web Technologies",
+    icon: Globe,
+    items: [
+      "Page Visibility API",
+      "requestAnimationFrame",
+      "setInterval Timer",
+      "WebGL GPU Acceleration",
+      "HTML Canvas Rendering"
+    ],
+    color: "text-blue-400",
+  },
+  {
+    category: "Algorithms & Data Processing",
+    icon: Brain,
+    items: [
+      "Fisher-Yates Shuffle Algorithm",
+      "Stratified Sampling",
+      "Weighted Penalty Scoring",
+      "Group-By Topic Analysis",
+      "Lookup Table Recommendation Engine"
+    ],
+    color: "text-pink-400",
   },
 ];
 
