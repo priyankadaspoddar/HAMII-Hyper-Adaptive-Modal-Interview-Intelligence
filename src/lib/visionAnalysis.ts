@@ -238,11 +238,26 @@ export class VisionAnalyzer {
     const earNormalized = Math.max(0, Math.min(1, (avgEAR - 0.15) / 0.25));
     const eyeOpennessScore = earNormalized * 100;
    
-    // Improved gaze scoring with exponential falloff
-    const gazeScore = Math.max(0, Math.pow(1 - Math.min(gazeDistance, 1), 1.5) * 100);
+    // Estimate face size to gauge distance from camera
+    // Use eye width as proxy — smaller eyes = farther away
+    const leftEyeWidth = Math.abs((landmarks[133]?.x || 0) - (landmarks[33]?.x || 0));
+    const rightEyeWidth = Math.abs((landmarks[263]?.x || 0) - (landmarks[362]?.x || 0));
+    const avgEyeWidth = (leftEyeWidth + rightEyeWidth) / 2;
+    
+    // Adaptive tolerance: when face is far (small eye width), gaze landmarks are noisier
+    // Typical eye width: ~0.05 close, ~0.02 far. Scale tolerance inversely with size.
+    const distanceFactor = Math.max(0.3, Math.min(1, avgEyeWidth / 0.04)); // 1.0 at normal, <1 when far
+    const gazeTolerance = 1.0 + (1 - distanceFactor) * 1.5; // More lenient when far away
+    const adjustedGazeDistance = gazeDistance / gazeTolerance;
+    
+    // Softer falloff curve (linear blend instead of harsh exponential)
+    const gazeScore = Math.max(0, (1 - Math.min(adjustedGazeDistance, 1)) * 100);
+    
+    // Base score: if face is detected and eyes are open, guarantee a floor
+    const faceDetectedFloor = eyeOpennessScore > 30 ? 25 : 0;
    
-    // Weighted combination favoring gaze direction
-    const eyeContact = Math.round((gazeScore * 0.75 + eyeOpennessScore * 0.25));
+    // Weighted combination with distance-aware floor
+    const eyeContact = Math.round(Math.max(faceDetectedFloor, gazeScore * 0.7 + eyeOpennessScore * 0.3));
     // === ENHANCED MICRO-EXPRESSION ANALYSIS ===
     let facialMovement = 0;
     if (this.previousFaceLandmarks) {
