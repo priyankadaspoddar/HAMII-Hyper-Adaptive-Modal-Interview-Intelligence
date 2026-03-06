@@ -8,7 +8,10 @@ const technologies = [
     items: [
       "React",
       "Vite",
+      "Tailwind CSS",
+      "Shadcn/ui",
       "TypeScript"
+      
     ],
     color: "text-purple-400",
   },
@@ -17,7 +20,7 @@ const technologies = [
     icon: Server,
     items: [
       "Firebase",
-      "Serverless Edge REST APIs",
+      "Supabase",
       "Groq Llama-3 AI",
       "Gemini AI"
     ],
@@ -68,12 +71,26 @@ const technologies = [
     color: "text-blue-400",
   },
   {
-    category: "Algorithms & Data Processing",
+  category: "Algorithms & Data Processing (Technical Proctored Exam)",
+  icon: Brain,
+  items: [
+    "Fisher-Yates Shuffle Algorithm",
+    "Stratified Sampling",
+    "Weighted Penalty Scoring",
+    "Group-By Topic Analysis",
+    "Lookup Table Recommendation Engine",
+    "Bayesian Multi-Signal Proctoring Algorithm"
+  ],
+  color: "text-pink-400",
+}
+  {
+    category: "Algorithms & Data Processing(Multi-Modal Communication Coach)",
     icon: Brain,
     items: [
-      "Bayesian Multi-Signal Proctoring Algorithm",
-      "Fusion Engine (Bayesian Scoring + Exponential Moving Average)",
-      "Multi-Modal Communication Coach (Bayesian Fusion)"
+      "Bayesian Algorithm",
+      "Fusion Engine",
+      "Bayesian Scoring & Exponential Moving Average",
+      
     ],
     color: "text-pink-400",
   },
