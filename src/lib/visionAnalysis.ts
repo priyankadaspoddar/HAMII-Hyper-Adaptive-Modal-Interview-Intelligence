@@ -615,6 +615,17 @@ export class VisionAnalyzer {
     const rightHip = landmarks[24];
     // === IMPROVED POSTURE CALCULATIONS ===
    
+    // Check landmark visibility (pose landmarks have visibility property)
+    const shoulderVisibility = Math.min(
+      leftShoulder.visibility || 0.5, 
+      rightShoulder.visibility || 0.5
+    );
+    const hipVisibility = Math.min(
+      leftHip.visibility || 0, 
+      rightHip.visibility || 0
+    );
+    const hipsVisible = hipVisibility > 0.3;
+    
     // 1. Shoulder alignment (horizontal level check)
     const shoulderAngle = Math.abs(
       Math.atan2(
@@ -622,7 +633,8 @@ export class VisionAnalyzer {
         rightShoulder.x - leftShoulder.x
       ) * (180 / Math.PI)
     );
-    const shoulderAlignment = Math.max(0, Math.min(100, 100 - shoulderAngle * 3));
+    // Shoulders are rarely perfectly level; allow ~5° before penalizing
+    const shoulderAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, shoulderAngle - 5) * 4));
    
     // 2. Head position (should be centered over shoulders)
     const shoulderMid = {
@@ -631,30 +643,43 @@ export class VisionAnalyzer {
       z: ((leftShoulder.z || 0) + (rightShoulder.z || 0)) / 2,
     };
    
+    // Softer head offset penalty — allow natural slight offset
     const headOffset = Math.abs(nose.x - shoulderMid.x);
-    const headPosition = Math.max(0, Math.min(100, 100 - headOffset * 150));
+    const headPosition = Math.max(0, Math.min(100, 100 - Math.max(0, headOffset - 0.03) * 120));
    
-    // 3. Spine alignment (vertical check)
-    const hipMid = {
-      x: (leftHip.x + rightHip.x) / 2,
-      y: (leftHip.y + rightHip.y) / 2,
-      z: ((leftHip.z || 0) + (rightHip.z || 0)) / 2,
-    };
-    const spineDeviation = Math.abs(shoulderMid.x - hipMid.x);
-    const spineAlignment = Math.max(0, Math.min(100, 100 - spineDeviation * 200));
+    // 3. Spine alignment — only use if hips are actually visible
+    let spineAlignment = 80; // Default good score when hips not visible
+    if (hipsVisible) {
+      const hipMid = {
+        x: (leftHip.x + rightHip.x) / 2,
+        y: (leftHip.y + rightHip.y) / 2,
+        z: ((leftHip.z || 0) + (rightHip.z || 0)) / 2,
+      };
+      const spineDeviation = Math.abs(shoulderMid.x - hipMid.x);
+      spineAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, spineDeviation - 0.02) * 150));
+    }
    
-    // 4. Neck angle (head tilt)
-    const neckPoint = { x: nose.x, y: nose.y - 0.1, z: nose.z }; // Virtual point above head
-    const neckAngle = this.calculateAngle(neckPoint, nose, shoulderMid);
-    const headUpright = Math.max(0, Math.min(100, 100 - Math.abs(180 - neckAngle) * 1.5));
+    // 4. Shoulder-to-nose vertical ratio (upright indicator)
+    // If nose is well above shoulders, person is upright
+    const verticalGap = shoulderMid.y - nose.y; // Positive = nose above shoulders (good)
+    const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
+    const uprightRatio = shoulderWidth > 0 ? verticalGap / shoulderWidth : 0.5;
+    // Good upright ratio is ~0.3-0.7; normalize
+    const headUpright = Math.max(0, Math.min(100, uprightRatio * 150));
    
-    // Overall posture score
-    const postureScore = Math.round(
-      shoulderAlignment * 0.3 +
-      headPosition * 0.2 +
-      spineAlignment * 0.3 +
-      headUpright * 0.2
-    );
+    // Overall posture score — adjust weights based on hip visibility
+    const postureScore = hipsVisible
+      ? Math.round(
+          shoulderAlignment * 0.25 +
+          headPosition * 0.25 +
+          spineAlignment * 0.25 +
+          headUpright * 0.25
+        )
+      : Math.round(
+          shoulderAlignment * 0.35 +
+          headPosition * 0.30 +
+          headUpright * 0.35
+        );
    
     // 5. Stability (frame-to-frame movement)
     let stability = 100;
