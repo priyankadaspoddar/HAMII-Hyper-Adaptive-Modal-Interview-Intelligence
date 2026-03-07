@@ -607,85 +607,71 @@ export class VisionAnalyzer {
       };
     }
     const landmarks = results.landmarks[0];
-    // Key pose landmarks
+    // Upper body only: nose, left ear, right ear, left shoulder, right shoulder
     const nose = landmarks[0];
+    const leftEar = landmarks[7];
+    const rightEar = landmarks[8];
     const leftShoulder = landmarks[11];
     const rightShoulder = landmarks[12];
-    const leftHip = landmarks[23];
-    const rightHip = landmarks[24];
-    // === IMPROVED POSTURE CALCULATIONS ===
-   
-    // Check landmark visibility (pose landmarks have visibility property)
-    const shoulderVisibility = Math.min(
-      leftShoulder.visibility || 0.5, 
-      rightShoulder.visibility || 0.5
-    );
-    const hipVisibility = Math.min(
-      leftHip.visibility || 0, 
-      rightHip.visibility || 0
-    );
-    const hipsVisible = hipVisibility > 0.3;
-    
-    // 1. Shoulder alignment (horizontal level check)
+
+    // === 1. SHOULDER ALIGNMENT (are shoulders level?) ===
     const shoulderAngle = Math.abs(
       Math.atan2(
         rightShoulder.y - leftShoulder.y,
         rightShoulder.x - leftShoulder.x
       ) * (180 / Math.PI)
     );
-    // Shoulders are rarely perfectly level; allow ~5° before penalizing
+    // Allow 5° dead zone before penalizing
     const shoulderAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, shoulderAngle - 5) * 4));
-   
-    // 2. Head position (should be centered over shoulders)
-    const shoulderMid = {
-      x: (leftShoulder.x + rightShoulder.x) / 2,
-      y: (leftShoulder.y + rightShoulder.y) / 2,
-      z: ((leftShoulder.z || 0) + (rightShoulder.z || 0)) / 2,
-    };
-   
-    // Softer head offset penalty — allow natural slight offset
-    const headOffset = Math.abs(nose.x - shoulderMid.x);
+
+    // === 2. HEAD CENTERING (head centered over shoulders) ===
+    const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2;
+    const headOffset = Math.abs(nose.x - shoulderMidX);
+    // Allow 0.03 dead zone
     const headPosition = Math.max(0, Math.min(100, 100 - Math.max(0, headOffset - 0.03) * 120));
-   
-    // 3. Spine alignment — only use if hips are actually visible
-    let spineAlignment = 80; // Default good score when hips not visible
-    if (hipsVisible) {
-      const hipMid = {
-        x: (leftHip.x + rightHip.x) / 2,
-        y: (leftHip.y + rightHip.y) / 2,
-        z: ((leftHip.z || 0) + (rightHip.z || 0)) / 2,
-      };
-      const spineDeviation = Math.abs(shoulderMid.x - hipMid.x);
-      spineAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, spineDeviation - 0.02) * 150));
-    }
-   
-    // 4. Shoulder-to-nose vertical ratio (upright indicator)
-    // If nose is well above shoulders, person is upright
-    const verticalGap = shoulderMid.y - nose.y; // Positive = nose above shoulders (good)
+
+    // === 3. SLOUCH DETECTION (key metric: vertical distance nose-to-shoulder-midpoint) ===
+    // When sitting upright, nose is well above shoulder midpoint.
+    // When slouching, nose drops closer to shoulder level.
+    const shoulderMidY = (leftShoulder.y + rightShoulder.y) / 2;
     const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
-    const uprightRatio = shoulderWidth > 0 ? verticalGap / shoulderWidth : 0.5;
-    // Good upright ratio is ~0.3-0.7; normalize
-    const headUpright = Math.max(0, Math.min(100, uprightRatio * 150));
-   
-    // Overall posture score — adjust weights based on hip visibility
-    const postureScore = hipsVisible
-      ? Math.round(
-          shoulderAlignment * 0.25 +
-          headPosition * 0.25 +
-          spineAlignment * 0.25 +
-          headUpright * 0.25
-        )
-      : Math.round(
-          shoulderAlignment * 0.35 +
-          headPosition * 0.30 +
-          headUpright * 0.35
-        );
-   
-    // 5. Stability (frame-to-frame movement)
+    
+    // Vertical gap: positive means nose is above shoulders (in normalized coords, lower y = higher)
+    const verticalGap = shoulderMidY - nose.y;
+    
+    // Normalize by shoulder width to be scale-invariant
+    // Upright sitting: ratio ~0.4-0.8, Slouching: ratio <0.25
+    const uprightRatio = shoulderWidth > 0.01 ? verticalGap / shoulderWidth : 0.5;
+    
+    // Score: 0.5+ ratio = 100, drops linearly. Below 0.15 = very slouched
+    const slouchScore = Math.max(0, Math.min(100, (uprightRatio - 0.1) * 200));
+
+    // === 4. HEAD TILT (ear-level asymmetry) ===
+    const earTilt = Math.abs(leftEar.y - rightEar.y);
+    // Small tilt is natural; penalize above 0.02
+    const headTiltScore = Math.max(0, Math.min(100, 100 - Math.max(0, earTilt - 0.02) * 800));
+
+    // === 5. FORWARD HEAD (z-depth: nose much further forward than shoulders = forward lean) ===
+    const noseZ = nose.z || 0;
+    const shoulderMidZ = ((leftShoulder.z || 0) + (rightShoulder.z || 0)) / 2;
+    const forwardLean = shoulderMidZ - noseZ; // More negative = head more forward
+    // Normalize: some forward head is natural. Penalize excessive.
+    const forwardScore = Math.max(0, Math.min(100, 100 - Math.max(0, forwardLean - 0.05) * 300));
+
+    // === OVERALL POSTURE SCORE (upper body only) ===
+    const postureScore = Math.round(
+      shoulderAlignment * 0.20 +
+      headPosition * 0.15 +
+      slouchScore * 0.35 +      // Slouch is the most important signal
+      headTiltScore * 0.10 +
+      forwardScore * 0.20
+    );
+
+    // === STABILITY ===
     let stability = 100;
     if (this.previousPoseLandmarks) {
       let totalMovement = 0;
-      const keyPoints = [0, 11, 12, 23, 24]; // Nose, shoulders, hips
+      const keyPoints = [0, 7, 8, 11, 12]; // Nose, ears, shoulders only
       keyPoints.forEach(idx => {
         if (landmarks[idx] && this.previousPoseLandmarks[idx]) {
           const dx = landmarks[idx].x - this.previousPoseLandmarks[idx].x;
@@ -697,7 +683,7 @@ export class VisionAnalyzer {
       stability = Math.max(0, 100 - totalMovement * 500);
     }
     this.previousPoseLandmarks = landmarks;
-   
+
     return {
       postureScore: Math.max(0, postureScore),
       shoulderAlignment: Math.round(shoulderAlignment),
