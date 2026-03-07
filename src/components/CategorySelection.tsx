@@ -74,6 +74,16 @@ const CategorySelection = ({ onSelect }: CategorySelectionProps) => {
   return (
     <div className="min-h-screen bg-gradient-hero p-4 flex items-center justify-center">
       <div className="container mx-auto max-w-6xl">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight className="w-4 h-4 rotate-180" />
+            Back to Home
+          </Button>
+        </div>
         <div className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
             Choose Your Path
