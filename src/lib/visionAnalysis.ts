@@ -614,57 +614,54 @@ export class VisionAnalyzer {
     const leftShoulder = landmarks[11];
     const rightShoulder = landmarks[12];
 
-    // === 1. SHOULDER ALIGNMENT (are shoulders level?) ===
+    // === 1. SHOULDER ALIGNMENT (kept for diagnostics only, very lenient) ===
     const shoulderAngle = Math.abs(
       Math.atan2(
         rightShoulder.y - leftShoulder.y,
         rightShoulder.x - leftShoulder.x
       ) * (180 / Math.PI)
     );
-    // Allow 5° dead zone before penalizing
-    const shoulderAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, shoulderAngle - 5) * 4));
+    const shoulderAlignment = Math.max(0, Math.min(100, 100 - Math.max(0, shoulderAngle - 8) * 3));
 
-    // === 2. HEAD CENTERING (head centered over shoulders) ===
+    // === 2. HEAD CENTERING (kept for diagnostics only, lenient dead zone) ===
     const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2;
     const headOffset = Math.abs(nose.x - shoulderMidX);
-    // Allow 0.03 dead zone
-    const headPosition = Math.max(0, Math.min(100, 100 - Math.max(0, headOffset - 0.03) * 120));
+    const headPosition = Math.max(0, Math.min(100, 100 - Math.max(0, headOffset - 0.06) * 90));
 
-    // === 3. SLOUCH DETECTION (key metric: vertical distance nose-to-shoulder-midpoint) ===
-    // When sitting upright, nose is well above shoulder midpoint.
-    // When slouching, nose drops closer to shoulder level.
+    // === 3. SLOUCH DETECTION (primary posture signal) ===
+    // Only penalize clearly slouched posture while seated.
     const shoulderMidY = (leftShoulder.y + rightShoulder.y) / 2;
     const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
-    
-    // Vertical gap: positive means nose is above shoulders (in normalized coords, lower y = higher)
     const verticalGap = shoulderMidY - nose.y;
-    
-    // Normalize by shoulder width to be scale-invariant
-    // Upright sitting: ratio ~0.4-0.8, Slouching: ratio <0.25
     const uprightRatio = shoulderWidth > 0.01 ? verticalGap / shoulderWidth : 0.5;
-    
-    // Score: ratio 0.25+ = 100 (upright), drops below. 0.05 = very slouched
-    const slouchScore = Math.max(0, Math.min(100, (uprightRatio - 0.05) * 500));
 
-    // === 4. HEAD TILT (ear-level asymmetry) ===
+    let slouchScore: number;
+    if (uprightRatio >= 0.2) {
+      slouchScore = 100; // Upright seated posture
+    } else if (uprightRatio >= 0.14) {
+      slouchScore = 80 + ((uprightRatio - 0.14) / 0.06) * 20;
+    } else if (uprightRatio >= 0.08) {
+      slouchScore = 40 + ((uprightRatio - 0.08) / 0.06) * 40;
+    } else {
+      slouchScore = Math.max(0, (uprightRatio / 0.08) * 40);
+    }
+    slouchScore = Math.max(0, Math.min(100, slouchScore));
+
+    // === 4. HEAD TILT (secondary signal, only penalize excessive tilt) ===
     const earTilt = Math.abs(leftEar.y - rightEar.y);
-    // Small tilt is natural; penalize above 0.02
-    const headTiltScore = Math.max(0, Math.min(100, 100 - Math.max(0, earTilt - 0.02) * 800));
+    const headTiltScore = Math.max(0, Math.min(100, 100 - Math.max(0, earTilt - 0.045) * 1800));
 
-    // === 5. FORWARD HEAD (z-depth: nose much further forward than shoulders = forward lean) ===
+    // === 5. FORWARD HEAD (kept for diagnostics only) ===
     const noseZ = nose.z || 0;
     const shoulderMidZ = ((leftShoulder.z || 0) + (rightShoulder.z || 0)) / 2;
-    const forwardLean = shoulderMidZ - noseZ; // More negative = head more forward
-    // Normalize: some forward head is natural. Penalize excessive.
-    const forwardScore = Math.max(0, Math.min(100, 100 - Math.max(0, forwardLean - 0.05) * 300));
+    const forwardLean = shoulderMidZ - noseZ;
+    const forwardScore = Math.max(0, Math.min(100, 100 - Math.max(0, forwardLean - 0.12) * 180));
 
-    // === OVERALL POSTURE SCORE (upper body only) ===
+    // === OVERALL POSTURE SCORE ===
+    // User-requested behavior: only significantly penalize slouching and excessive head tilt.
     const postureScore = Math.round(
-      shoulderAlignment * 0.20 +
-      headPosition * 0.15 +
-      slouchScore * 0.35 +      // Slouch is the most important signal
-      headTiltScore * 0.10 +
-      forwardScore * 0.20
+      slouchScore * 0.8 +
+      headTiltScore * 0.2
     );
 
     // === STABILITY ===
