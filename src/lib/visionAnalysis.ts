@@ -643,8 +643,8 @@ export class VisionAnalyzer {
     // Upright sitting: ratio ~0.4-0.8, Slouching: ratio <0.25
     const uprightRatio = shoulderWidth > 0.01 ? verticalGap / shoulderWidth : 0.5;
     
-    // Score: 0.5+ ratio = 100, drops linearly. Below 0.15 = very slouched
-    const slouchScore = Math.max(0, Math.min(100, (uprightRatio - 0.1) * 200));
+    // Score: ratio 0.25+ = 100 (upright), drops below. 0.05 = very slouched
+    const slouchScore = Math.max(0, Math.min(100, (uprightRatio - 0.05) * 500));
 
     // === 4. HEAD TILT (ear-level asymmetry) ===
     const earTilt = Math.abs(leftEar.y - rightEar.y);
