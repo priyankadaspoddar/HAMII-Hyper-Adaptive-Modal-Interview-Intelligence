@@ -651,11 +651,6 @@ export class VisionAnalyzer {
     const earTilt = Math.abs(leftEar.y - rightEar.y);
     const headTiltScore = Math.max(0, Math.min(100, 100 - Math.max(0, earTilt - 0.045) * 1800));
 
-    // === 5. FORWARD HEAD (kept for diagnostics only) ===
-    const noseZ = nose.z || 0;
-    const shoulderMidZ = ((leftShoulder.z || 0) + (rightShoulder.z || 0)) / 2;
-    const forwardLean = shoulderMidZ - noseZ;
-    const forwardScore = Math.max(0, Math.min(100, 100 - Math.max(0, forwardLean - 0.12) * 180));
 
     // === OVERALL POSTURE SCORE ===
     // User-requested behavior: only significantly penalize slouching and excessive head tilt.
