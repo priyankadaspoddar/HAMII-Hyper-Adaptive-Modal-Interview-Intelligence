@@ -23,7 +23,7 @@ const CTA = () => {
               onClick={() => window.location.href = '/practice'}
               className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-glow-primary text-lg px-8 py-6 group"
             >
-              Get Started Free
+              Practise Mode for Interview
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Button>
           </div>
