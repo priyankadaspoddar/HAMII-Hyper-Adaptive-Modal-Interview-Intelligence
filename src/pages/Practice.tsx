@@ -430,8 +430,8 @@ const Practice = () => {
     <div className="min-h-screen bg-gradient-hero p-4">
       <div className="container mx-auto max-w-7xl">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Home
+          <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)} className="text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Categories
           </Button>
         </div>
 
