@@ -212,6 +212,15 @@ const Practice = () => {
           ? contentAnalyzerRef.current.analyzeContent(finalTranscript)
           : null;
 
+        if (audioFeatures) {
+          setMetrics(prev => ({
+            ...prev,
+            pitch: audioFeatures.pitch,
+            volume: audioFeatures.volume,
+            clarity: audioFeatures.clarity || prev.clarity,
+          }));
+        }
+
         if (visionMetrics && audioFeatures) {
           const rawMetrics: RawMetrics = {
             eyeContact: visionMetrics.face.eyeContact,
@@ -371,10 +380,17 @@ const Practice = () => {
     fusionAlgorithmRef.current.reset();
     lastBackendAnalysisRef.current = 0;
 
-    audioAnalyzerRef.current = new AudioAnalyzer();
-    audioAnalyzerRef.current.initialize(stream);
+    try {
+      audioAnalyzerRef.current = new AudioAnalyzer();
+      audioAnalyzerRef.current.initialize(stream);
+      void audioAnalyzerRef.current.resume();
+    } catch (error) {
+      console.error("Audio analysis start error:", error);
+      toast({ title: "Audio Analysis Failed", description: "Please check microphone permission", variant: "destructive" });
+    }
 
     if (speechRecognitionRef.current && speechRecognitionSupported) {
+      speechRecognitionRef.current.setLanguage("en");
       const started = speechRecognitionRef.current.start();
       if (!started) {
         toast({ title: "Speech Recognition Failed", description: "Could not start", variant: "destructive" });
