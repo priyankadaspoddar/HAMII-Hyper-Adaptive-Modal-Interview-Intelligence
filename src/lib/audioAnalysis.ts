@@ -145,8 +145,8 @@ export class AudioAnalyzer {
       // ---- CLARITY (fixed) ----
       const clarity = this.calculateClarity(snr, zcr, spectralCentroid, energy);
 
-      return {
-        pitch: Math.round(validPitch),
+      const result: AudioFeatures = {
+        pitch: Math.round(validPitch || this.lastGood?.pitch || 0),
         pitchVariation: Math.round(Math.min(100, pitchVariation * 100)),
         volume: Math.round(volumeDB * 10) / 10,
         volumeVariation: Math.round(Math.min(100, volumeVariation * 100)),
@@ -157,6 +157,8 @@ export class AudioAnalyzer {
         zeroCrossingRate: Number(zcr.toFixed(3)),
         snr: Math.round(snr * 10) / 10,
       };
+      this.lastGood = result;
+      return result;
     } catch (e) {
       console.error('Feature extraction error:', e);
       return this.defaultFeatures();
