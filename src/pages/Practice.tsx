@@ -308,9 +308,8 @@ const Practice = () => {
     }
     const update = () => {
       if (audioAnalyzerRef.current) {
-        const features = audioAnalyzerRef.current.getAudioFeatures();
-        const normalized = Math.max(0, Math.min(100, (features.volume + 60) * 1.67));
-        setAudioLevel(Math.round(normalized));
+        // Use raw RMS level for the audio bar — always responsive
+        setAudioLevel(audioAnalyzerRef.current.getRawLevel());
       }
       if (isRecording) requestAnimationFrame(update);
     };
