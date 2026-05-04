@@ -631,11 +631,11 @@ const Practice = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground mb-1">Pitch</p>
-                      <p className="text-sm font-bold text-foreground">{metrics.pitch} Hz</p>
+                      <p className="text-sm font-bold text-foreground">{metrics.pitch > 0 ? `${metrics.pitch} Hz` : '—'}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground mb-1">Volume</p>
-                      <p className="text-sm font-bold text-foreground">{metrics.volume} dB</p>
+                      <p className="text-sm font-bold text-foreground">{Number.isFinite(metrics.volume) && metrics.volume < 0 ? `${metrics.volume} dB` : '—'}</p>
                     </div>
                   </div>
                 </div>
