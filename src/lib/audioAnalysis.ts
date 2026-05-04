@@ -19,8 +19,8 @@ export class AudioAnalyzer {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
-  private dataArray: Uint8Array | null = null;
-  private frequencyData: Uint8Array | null = null;
+  private dataArray: Uint8Array<ArrayBuffer> | null = null;
+  private frequencyData: Uint8Array<ArrayBuffer> | null = null;
 
   private pitchHistory: number[] = [];
   private volumeHistory: number[] = [];
