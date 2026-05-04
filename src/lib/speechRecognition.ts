@@ -42,12 +42,6 @@ export class SpeechRecognitionService {
         else interim += t;
       }
 
-      // Auto language detection
-      if (final) {
-        const detected = this.detectLanguage(final);
-        this.setLanguage(detected);
-      }
-
       if (final && this.onTranscriptCallback) {
         this.onTranscriptCallback(final.trim(), true);
       } else if (interim && this.onTranscriptCallback) {
@@ -68,16 +62,22 @@ export class SpeechRecognitionService {
 
     this.recognition.onend = () => {
       if (this.isListening) {
-        setTimeout(() => this.recognition.start(), 100);
+        setTimeout(() => {
+          try { this.recognition.start(); } catch {}
+        }, 100);
       }
     };
   }
 
-  /** Public: set language manually (used by dropdown) */
+  /** Public: set language manually (used by dropdown). Restarts recognition if active. */
   setLanguage(code: "en" | "hi" | "te" | string) {
-    if (this.recognition) {
-      const full = this.LANG_MAP[code] || code;
-      this.recognition.lang = full;
+    if (!this.recognition) return;
+    const full = this.LANG_MAP[code] || code;
+    if (this.recognition.lang === full) return;
+    this.recognition.lang = full;
+    if (this.isListening) {
+      try { this.recognition.stop(); } catch {}
+      // onend will auto-restart with new lang
     }
   }
 

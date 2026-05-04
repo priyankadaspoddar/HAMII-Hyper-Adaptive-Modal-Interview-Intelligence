@@ -308,9 +308,8 @@ const Practice = () => {
     }
     const update = () => {
       if (audioAnalyzerRef.current) {
-        const features = audioAnalyzerRef.current.getAudioFeatures();
-        const normalized = Math.max(0, Math.min(100, (features.volume + 60) * 1.67));
-        setAudioLevel(Math.round(normalized));
+        // Use raw RMS level for the audio bar — always responsive
+        setAudioLevel(audioAnalyzerRef.current.getRawLevel());
       }
       if (isRecording) requestAnimationFrame(update);
     };
@@ -632,11 +631,11 @@ const Practice = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground mb-1">Pitch</p>
-                      <p className="text-sm font-bold text-foreground">{metrics.pitch} Hz</p>
+                      <p className="text-sm font-bold text-foreground">{metrics.pitch > 0 ? `${metrics.pitch} Hz` : '—'}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground mb-1">Volume</p>
-                      <p className="text-sm font-bold text-foreground">{metrics.volume} dB</p>
+                      <p className="text-sm font-bold text-foreground">{Number.isFinite(metrics.volume) && metrics.volume < 0 ? `${metrics.volume} dB` : '—'}</p>
                     </div>
                   </div>
                 </div>

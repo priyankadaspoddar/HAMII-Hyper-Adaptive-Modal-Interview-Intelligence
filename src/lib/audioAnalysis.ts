@@ -69,6 +69,26 @@ export class AudioAnalyzer {
   }
 
   // --------------------------------------------------------
+  //  RAW LEVEL (always-on, for VU meter / audio bar)
+  //  Returns 0-100 regardless of voice gating
+  // --------------------------------------------------------
+  getRawLevel(): number {
+    if (!this.analyser || !this.dataArray) return 0;
+    try {
+      // @ts-ignore
+      this.analyser.getByteTimeDomainData(this.dataArray!);
+      const rms = this.calculateRMS(this.dataArray);
+      // rms ~0..1; speech typically 0.02..0.3 → scale & clamp
+      return Math.round(Math.max(0, Math.min(100, rms * 400)));
+    } catch {
+      return 0;
+    }
+  }
+
+  // Last good (non-zero) features so the UI doesn't flicker to 0 between voiced frames
+  private lastGood: AudioFeatures | null = null;
+
+  // --------------------------------------------------------
   //  MAIN FEATURE EXTRACTION
   // --------------------------------------------------------
   getAudioFeatures(): AudioFeatures {
@@ -91,7 +111,11 @@ export class AudioAnalyzer {
       const snr = this.calculateSNR(volumeDB);
       const isVoice = volumeDB > this.VOICE_THRESHOLD_DB && snr > 0;
 
-      if (!isVoice) return this.defaultFeatures();
+      if (!isVoice) {
+        // Return last good values so pitch/volume UI doesn't drop to 0 between syllables
+        if (this.lastGood) return { ...this.lastGood, volume: Math.round(volumeDB * 10) / 10 };
+        return { ...this.defaultFeatures(), volume: Math.round(volumeDB * 10) / 10 };
+      }
 
       // ---- Pitch (YIN) ----
       const pitch = this.detectPitchYIN(this.dataArray);
@@ -121,8 +145,8 @@ export class AudioAnalyzer {
       // ---- CLARITY (fixed) ----
       const clarity = this.calculateClarity(snr, zcr, spectralCentroid, energy);
 
-      return {
-        pitch: Math.round(validPitch),
+      const result: AudioFeatures = {
+        pitch: Math.round(validPitch || this.lastGood?.pitch || 0),
         pitchVariation: Math.round(Math.min(100, pitchVariation * 100)),
         volume: Math.round(volumeDB * 10) / 10,
         volumeVariation: Math.round(Math.min(100, volumeVariation * 100)),
@@ -133,6 +157,8 @@ export class AudioAnalyzer {
         zeroCrossingRate: Number(zcr.toFixed(3)),
         snr: Math.round(snr * 10) / 10,
       };
+      this.lastGood = result;
+      return result;
     } catch (e) {
       console.error('Feature extraction error:', e);
       return this.defaultFeatures();
@@ -349,5 +375,6 @@ export class AudioAnalyzer {
     this.calibrationSamples = [];
     this.noiseCalibrated = false;
     this.noiseFloor = -60;
+    this.lastGood = null;
   }
 }
