@@ -18,10 +18,9 @@ const technologies = [
     category: "Backend & AI Services",
     icon: Server,
     items: [
-      "Firebase",
       "Supabase",
       "Groq Llama-3 AI",
-      "Gemini AI"
+      "Hosting via Vercel Edge"
     ],
     color: "text-indigo-400",
   },
@@ -32,7 +31,6 @@ const technologies = [
       "MediaPipe Face/Pose/Iris",
       "Groq Llama-3 70B Model",
       "FACS (Facial Action Coding System)",
-      "BlazeFace Neural Network"
     ],
     color: "text-cyan-400",
   },
@@ -57,30 +55,7 @@ const technologies = [
     ],
     color: "text-orange-400",
   },
-  {
-    category: "Browser APIs & Web Technologies",
-    icon: Globe,
-    items: [
-      "Page Visibility API",
-      "requestAnimationFrame",
-      "setInterval Timer",
-      "WebGL GPU Acceleration",
-      "HTML Canvas Rendering"
-    ],
-    color: "text-blue-400",
-  },
-  {
-    category: "Algorithms & Data Processing (Technical Proctored Exam)",
-    icon: Brain,
-    items: [
-    "Fisher-Yates Shuffle Algorithm",
-    "Stratified Sampling",
-    "Weighted Penalty Scoring",
-    "Group-By Topic Analysis",
-    "Lookup Table Recommendation Engine"
-    ],
-    color: "text-pink-400",
-  },
+  
   {
     category: "Algorithms & Data Processing (Multi-Modal Communication Coach)",
     icon: Brain,
