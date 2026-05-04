@@ -275,7 +275,7 @@ export class AudioAnalyzer {
   // --------------------------------------------------------
   //  SPECTRAL CENTROID
   // --------------------------------------------------------
-  private calculateSpectralCentroid(freqData: Uint8Array): number {
+  private calculateSpectralCentroid(freqData: Uint8Array<ArrayBufferLike>): number {
     let weighted = 0;
     let total = 0;
     for (let i = 0; i < freqData.length; i++) {
@@ -289,7 +289,7 @@ export class AudioAnalyzer {
   // --------------------------------------------------------
   //  ZERO CROSSING RATE
   // --------------------------------------------------------
-  private calculateZeroCrossingRate(buffer: Uint8Array): number {
+  private calculateZeroCrossingRate(buffer: Uint8Array<ArrayBufferLike>): number {
     let crosses = 0;
     for (let i = 1; i < buffer.length; i++) {
       const a = buffer[i - 1] >= 128;
