@@ -111,7 +111,11 @@ export class AudioAnalyzer {
       const snr = this.calculateSNR(volumeDB);
       const isVoice = volumeDB > this.VOICE_THRESHOLD_DB && snr > 0;
 
-      if (!isVoice) return this.defaultFeatures();
+      if (!isVoice) {
+        // Return last good values so pitch/volume UI doesn't drop to 0 between syllables
+        if (this.lastGood) return { ...this.lastGood, volume: Math.round(volumeDB * 10) / 10 };
+        return { ...this.defaultFeatures(), volume: Math.round(volumeDB * 10) / 10 };
+      }
 
       // ---- Pitch (YIN) ----
       const pitch = this.detectPitchYIN(this.dataArray);
