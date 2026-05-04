@@ -57,7 +57,7 @@ const technologies = [
   },
   
   {
-    category: "Algorithms & Data Processing (Multi-Modal Communication Coach)",
+    category: "Algorithms & Data Processing",
     icon: Brain,
     items: [
       "Bayesian Algorithm",
