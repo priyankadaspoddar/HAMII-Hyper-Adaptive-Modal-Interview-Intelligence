@@ -4,7 +4,9 @@ export type ErrorCallback = (error: string) => void;
 
 export class SpeechRecognitionService {
   private recognition: any;
+  private SpeechRecognitionCtor: any;
   private isListening = false;
+  private currentLanguage = "en-US";
   private onTranscriptCallback: TranscriptCallback | null = null;
   private onErrorCallback: ErrorCallback | null = null;
 
@@ -16,21 +18,23 @@ export class SpeechRecognitionService {
   };
 
   constructor() {
-    const SpeechRecognition =
+    this.SpeechRecognitionCtor =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
+    if (!this.SpeechRecognitionCtor) {
       console.error("Speech recognition not supported in this browser");
-      return;
     }
+  }
 
-    this.recognition = new SpeechRecognition();
+  private ensureRecognition() {
+    if (!this.SpeechRecognitionCtor) return false;
+    if (this.recognition) return true;
+
+    this.recognition = new this.SpeechRecognitionCtor();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
     this.recognition.maxAlternatives = 3;
-
-    // Start with English – auto-switch later
-    this.setLanguage("en");
+    this.recognition.lang = this.currentLanguage;
 
     this.recognition.onresult = (event: any) => {
       let interim = "";
@@ -67,13 +71,15 @@ export class SpeechRecognitionService {
         }, 100);
       }
     };
+
+    return true;
   }
 
   /** Public: set language manually (used by dropdown). Restarts recognition if active. */
   setLanguage(code: "en" | "hi" | "te" | string) {
-    if (!this.recognition) return;
     const full = this.LANG_MAP[code] || code;
-    if (this.recognition.lang === full) return;
+    this.currentLanguage = full;
+    if (!this.recognition || this.recognition.lang === full) return;
     this.recognition.lang = full;
     if (this.isListening) {
       try { this.recognition.stop(); } catch {}
@@ -89,9 +95,10 @@ export class SpeechRecognitionService {
   }
 
   start() {
-    if (!this.recognition) return false;
+    if (!this.ensureRecognition()) return false;
     try {
       this.isListening = true;
+      this.recognition.lang = this.currentLanguage;
       this.recognition.start();
       return true;
     } catch (e) {
@@ -119,7 +126,7 @@ export class SpeechRecognitionService {
   }
 
   isSupported() {
-    return !!this.recognition;
+    return !!this.SpeechRecognitionCtor;
   }
 }
 
