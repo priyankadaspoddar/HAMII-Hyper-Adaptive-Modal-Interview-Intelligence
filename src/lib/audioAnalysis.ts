@@ -18,6 +18,7 @@ export interface AudioFeatures {
 export class AudioAnalyzer {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private source: MediaStreamAudioSourceNode | null = null;
   private dataArray: Uint8Array | null = null;
   private frequencyData: Uint8Array | null = null;
 
@@ -29,7 +30,7 @@ export class AudioAnalyzer {
   private noiseCalibrated = false;
   private calibrationSamples: number[] = [];
 
-  private readonly VOICE_THRESHOLD_DB = -45;   // dB
+  private readonly VOICE_THRESHOLD_DB = -58;   // dB - laptop/browser microphones are often quiet
   private readonly MIN_PITCH = 80;            // Hz
   private readonly MAX_PITCH = 500;           // Hz
   private readonly HISTORY_SIZE = 50;
@@ -39,25 +40,29 @@ export class AudioAnalyzer {
   // --------------------------------------------------------
   initialize(stream: MediaStream): void {
     try {
-      this.audioContext = new AudioContext({
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      this.audioContext = new AudioContextCtor({
         sampleRate: 48000,
         latencyHint: 'interactive',
       });
 
       this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.8;
+      this.analyser.fftSize = 4096;
+      this.analyser.smoothingTimeConstant = 0.55;
       this.analyser.minDecibels = -90;
       this.analyser.maxDecibels = -10;
 
-      const source = this.audioContext.createMediaStreamSource(stream);
-      source.connect(this.analyser);
+      this.source = this.audioContext.createMediaStreamSource(stream);
+      this.source.connect(this.analyser);
 
-      const bufferLength = this.analyser.frequencyBinCount;
-      const arrayBuffer = new ArrayBuffer(bufferLength);
-      const freqArrayBuffer = new ArrayBuffer(bufferLength);
+      const timeBufferLength = this.analyser.fftSize;
+      const frequencyBufferLength = this.analyser.frequencyBinCount;
+      const arrayBuffer = new ArrayBuffer(timeBufferLength);
+      const freqArrayBuffer = new ArrayBuffer(frequencyBufferLength);
       this.dataArray = new Uint8Array(arrayBuffer);
       this.frequencyData = new Uint8Array(freqArrayBuffer);
+
+      void this.resume();
 
       // reset calibration
       this.noiseCalibrated = false;
@@ -75,13 +80,22 @@ export class AudioAnalyzer {
   getRawLevel(): number {
     if (!this.analyser || !this.dataArray) return 0;
     try {
+      void this.resume();
       // @ts-ignore
       this.analyser.getByteTimeDomainData(this.dataArray!);
       const rms = this.calculateRMS(this.dataArray);
-      // rms ~0..1; speech typically 0.02..0.3 → scale & clamp
-      return Math.round(Math.max(0, Math.min(100, rms * 400)));
+      const db = this.convertToDecibels(rms);
+      const levelFromDb = Number.isFinite(db) ? (db + 65) * 2.4 : 0;
+      const levelFromRms = rms * 650;
+      return Math.round(Math.max(0, Math.min(100, Math.max(levelFromDb, levelFromRms))));
     } catch {
       return 0;
+    }
+  }
+
+  async resume(): Promise<void> {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      await this.audioContext.resume().catch(() => {});
     }
   }
 
@@ -98,6 +112,7 @@ export class AudioAnalyzer {
 
     try {
       // @ts-ignore - Web Audio API types are compatible
+      void this.resume();
       this.analyser.getByteTimeDomainData(this.dataArray!);
       // @ts-ignore - Web Audio API types are compatible
       this.analyser.getByteFrequencyData(this.frequencyData!);
@@ -109,7 +124,8 @@ export class AudioAnalyzer {
       if (!this.noiseCalibrated) this.calibrateNoiseFloor(volumeDB);
 
       const snr = this.calculateSNR(volumeDB);
-      const isVoice = volumeDB > this.VOICE_THRESHOLD_DB && snr > 0;
+      const hasSignal = volumeDB > this.VOICE_THRESHOLD_DB && rms > 0.002;
+      const isVoice = hasSignal && (!this.noiseCalibrated || snr > 2 || volumeDB > -38);
 
       if (!isVoice) {
         // Return last good values so pitch/volume UI doesn't drop to 0 between syllables
