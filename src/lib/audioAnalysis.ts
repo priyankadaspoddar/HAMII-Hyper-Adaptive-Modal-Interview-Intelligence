@@ -375,5 +375,6 @@ export class AudioAnalyzer {
     this.calibrationSamples = [];
     this.noiseCalibrated = false;
     this.noiseFloor = -60;
+    this.lastGood = null;
   }
 }
