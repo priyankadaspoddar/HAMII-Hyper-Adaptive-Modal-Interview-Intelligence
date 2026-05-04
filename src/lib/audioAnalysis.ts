@@ -184,7 +184,7 @@ export class AudioAnalyzer {
   // --------------------------------------------------------
   //  YIN PITCH DETECTION (accurate for speech)
   // --------------------------------------------------------
-  private detectPitchYIN(buffer: Uint8Array): number {
+  private detectPitchYIN(buffer: Uint8Array<ArrayBufferLike>): number {
     const SIZE = buffer.length;
     const sampleRate = this.audioContext?.sampleRate ?? 48000;
 
@@ -247,7 +247,7 @@ export class AudioAnalyzer {
   // --------------------------------------------------------
   //  RMS → dB
   // --------------------------------------------------------
-  private calculateRMS(buffer: Uint8Array): number {
+  private calculateRMS(buffer: Uint8Array<ArrayBufferLike>): number {
     let sum = 0;
     for (let i = 0; i < buffer.length; i++) {
       const norm = (buffer[i] - 128) / 128;
@@ -263,7 +263,7 @@ export class AudioAnalyzer {
   // --------------------------------------------------------
   //  ENERGY (0-100)
   // --------------------------------------------------------
-  private calculateEnergy(freqData: Uint8Array): number {
+  private calculateEnergy(freqData: Uint8Array<ArrayBufferLike>): number {
     let sum = 0;
     for (let i = 0; i < freqData.length; i++) {
       const norm = freqData[i] / 255;
